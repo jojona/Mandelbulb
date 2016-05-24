@@ -133,13 +133,13 @@ void keyboard(unsigned char key, int x, int y) {
 		resetCamera();
 		std::cout << "View Front" << std::endl;
 	} else if (key == '2') {
-		setView(glm::vec3(0, -2.f, .001f), 0, 90);
+		setView(glm::vec3(0, -2.f, .001f), 0, 90 * 0.0174532925f);
 		std::cout << "View Up" << std::endl;
 	} else if (key == '3') {
-		setView(glm::vec3(-2.f, 0, 0), -90, 0);
+		setView(glm::vec3(-2.f, 0, 0), -90 * 0.0174532925f, 0);
 		std::cout << "View Side" << std::endl;
 	} else if (key == '4') {
-		setView(glm::vec3(0, 2.f, .001f), 0, -90);
+		setView(glm::vec3(0, 2.f, .001f), 0, -90 * 0.0174532925f);
 		std::cout << "View Down" << std::endl;
 	} else if (key == 'p') {
 		printf("Cameraview (%f, %f, %f) yaw: %f, pitch: %f\n", cameraPosition.x, cameraPosition.y, cameraPosition.z, yaw, pitch);
@@ -147,6 +147,8 @@ void keyboard(unsigned char key, int x, int y) {
 		setView(glm::vec3(0.514507f, 0.193910f, -1.154963f), 0.306770f, 0.073186f);
 	} else if (key == '6') {
 		setView(glm::vec3(0.020500f, 0.197362f, -0.961050f), 0.117f, -0.151f);
+	} else if (key == '7') {
+		setView(glm::vec3(0.391448f, 0.976358f, 0.322076f), 33.917992f, -0.978999f);
 	} else {
 		keyPressed[key] = true;
 	}
@@ -278,8 +280,8 @@ void resetCamera() {
  */
 void setView(glm::vec3 pos, float yawangle, float pitchangle) {
 	cameraPosition = pos;
-	yaw = yawangle * 0.0174532925f;
-	pitch = pitchangle * 0.0174532925f;
+	yaw = yawangle;
+	pitch = pitchangle;
 
 	calculateRotation();
 	for (size_t i = 0; i < 256; ++i) {

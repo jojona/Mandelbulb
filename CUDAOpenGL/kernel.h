@@ -25,7 +25,9 @@ __device__ bool BoundingSphere(glm::vec3 dir, glm::vec3 pos);
 __device__ bool PlaneFloor(glm::vec3 dir, glm::vec3 pos);
 
 extern "C" void launchKernel2(uchar4* pixels, unsigned int width, unsigned int height, glm::mat3 rot, glm::vec3 pos);
-__global__ void primaryRay(unsigned char*, float*, unsigned int, unsigned int, unsigned int primaryWidth, unsigned int primaryHeight, glm::mat3 rot, glm::vec3 pos);
-__global__ void secondaryRay(uchar4* pixel, unsigned char*, float*, unsigned int, unsigned int, unsigned int primaryWidth, unsigned int primaryHeight, glm::mat3 rot, glm::vec3 pos);
+__global__ void primaryRay(unsigned char*, float*, unsigned int w, unsigned int h, unsigned int primaryWidth, unsigned int primaryHeight, glm::mat3 rot, glm::vec3 pos);
+__global__ void secondaryRay(uchar4* pixel, unsigned char*, float*, unsigned int w, unsigned int h, unsigned int primaryWidth, unsigned int primaryHeight, glm::mat3 rot, glm::vec3 pos);
 
+
+__global__ void setUp(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps);
 #endif KERNEL_H
