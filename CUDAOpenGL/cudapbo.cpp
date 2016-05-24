@@ -101,7 +101,7 @@ void runCuda(glm::mat3 rot, glm::vec3 campos) {
 	// execute the kernel
 	//launch_kernel(dptr, window_width, window_height, rot, campos);
 
-	launchKernel2(dptr, window_width, window_height, rot, campos);
+	launchKernel(dptr, window_width, window_height, rot, campos);
 
 	// Unmap the buffer object
 	cudaGraphicsUnmapResources(1, &cuda_pbo, 0);
