@@ -29,5 +29,5 @@ __global__ void primaryRay(unsigned char*, float*, unsigned int w, unsigned int 
 __global__ void secondaryRay(uchar4* pixel, unsigned char*, float*, unsigned int w, unsigned int h, unsigned int primaryWidth, unsigned int primaryHeight, glm::mat3 rot, glm::vec3 pos);
 
 
-__global__ void setUp(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps);
+__global__ void setUp(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps, unsigned int amountPrimary);
 #endif KERNEL_H
