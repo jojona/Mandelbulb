@@ -6,13 +6,14 @@
 #include <device_launch_parameters.h>
 
 #include "kernel.h"
+//#include "constants.h"
 
 #define PIXELSPERTHREAD 1
-#define ACCSECONDARYSQUARE 3
+#define ACCSECONDARYSQUARE 1
 
-__constant__ float EpsilonRaymarch = 0.0005f; // 0.0005f;
-__constant__ int MaxRaymarchSteps = 60;
-__constant__ int FractalIterations = 10;
+__device__ float EpsilonRaymarch = 0.0005f; // 0.0005f;
+__device__ unsigned int MaxRaymarchSteps = 60;
+__device__ unsigned int FractalIterations = 10;
 
 void checkCUDAError(const char *msg) {
 	cudaError_t err = cudaGetLastError();
@@ -240,7 +241,15 @@ extern "C" void launch_kernel(uchar4* pos, unsigned int width, unsigned int heig
 
 
 extern "C" void launchKernel2(uchar4* pixels, unsigned int width, unsigned int height, glm::mat3 rot, glm::vec3 pos) {
-
+	
+	// Change these values if close or far away from the bulb
+	if (glm::length(pos) > 5.f) {
+		setUp << <1, 1 >> >(.01f, 5, 120);
+	} else {
+		setUp << <1, 1 >> >(.0005f, 10, 60);
+	}
+	cudaThreadSynchronize();
+	
 	// Allocate raymarchSteps and raymarchDistance
 	unsigned char* raymarchSteps;
 	float * raymarchDistance;
@@ -445,4 +454,24 @@ __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float
 			pixels[index].z = 0;
 		}
 	}
+}
+
+/*
+float time;
+cudaEvent_t start, stop;
+cudaEventCreate(&start);
+cudaEventCreate(&stop);
+
+cudaEventRecord(start, 0);
+setUp<< <1, 1>> >(.0005f, 10, 60);
+cudaEventRecord(stop, 0);
+cudaEventSynchronize(stop);
+cudaEventElapsedTime(&time, start, stop);
+printf("Time %f", time);
+*/
+
+__global__ void setUp(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps) {
+	EpsilonRaymarch = epsilon;
+	FractalIterations = fractalIterations;
+	MaxRaymarchSteps = raymarchsteps;
 }
