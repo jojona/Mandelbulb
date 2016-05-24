@@ -9,11 +9,13 @@
 //#include "constants.h"
 
 #define PIXELSPERTHREAD 1
-#define ACCSECONDARYSQUARE 1
+#define ACCSECONDARYSQUARE 5
 
 __device__ float EpsilonRaymarch = 0.0005f; // 0.0005f;
 __device__ unsigned int MaxRaymarchSteps = 60;
 __device__ unsigned int FractalIterations = 10;
+__device__ bool PrimaryRays = true;
+__device__ unsigned int AmountOfPrimaryRays = 5;
 
 void checkCUDAError(const char *msg) {
 	cudaError_t err = cudaGetLastError();
@@ -231,7 +233,7 @@ extern "C" void launch_kernel(uchar4* pos, unsigned int width, unsigned int heig
 	int totalThreads = height * width / PIXELSPERTHREAD;
 	int nBlocks = totalThreads / nThreads;
 
-	kernel<<<nBlocks, nThreads >>>(pos, width, height, rot, campos);
+	kernel << <nBlocks, nThreads >> >(pos, width, height, rot, campos);
 
 	// Synchronize
 	cudaThreadSynchronize();
@@ -241,44 +243,58 @@ extern "C" void launch_kernel(uchar4* pos, unsigned int width, unsigned int heig
 
 
 extern "C" void launchKernel2(uchar4* pixels, unsigned int width, unsigned int height, glm::mat3 rot, glm::vec3 pos) {
-	
+
 	// Change these values if close or far away from the bulb
-	if (glm::length(pos) > 5.f) {
-		setUp << <1, 1 >> >(.01f, 5, 120);
+	// TODO calculate LOD
+	unsigned int lod = 3;
+	unsigned int primRays = 5;
+
+	if (lod == 1) {
+		setUp << <1, 1 >> >(.01f, 5, 120, 9);
+		primRays = 9;
+	} else if (lod == 2) {
+		setUp << <1, 1 >> >(.0005f, 10, 60, 5);
+		primRays = 5;
 	} else {
-		setUp << <1, 1 >> >(.0005f, 10, 60);
+
 	}
 	cudaThreadSynchronize();
-	
-	// Allocate raymarchSteps and raymarchDistance
-	unsigned char* raymarchSteps;
-	float * raymarchDistance;
-
-	unsigned int primaryWidth = width % ACCSECONDARYSQUARE == 0 ? width / ACCSECONDARYSQUARE : width / ACCSECONDARYSQUARE + 1;
-	unsigned int primaryHeight = height % ACCSECONDARYSQUARE == 0 ? height / ACCSECONDARYSQUARE : height / ACCSECONDARYSQUARE + 1;
-	unsigned int primarySize = primaryWidth * primaryHeight;
-
-	cudaMalloc((void**)&raymarchSteps, sizeof(unsigned char) * primarySize); // Do only once?
-	cudaMalloc((void**)&raymarchDistance, sizeof(float) * primarySize); // Do only once?
-
-	int blockThreadsPrimary = 256;
-	int totalThreadsPrimary = primarySize;
-	int totalBlocksPrimary = totalThreadsPrimary % blockThreadsPrimary == 0 ? totalThreadsPrimary / blockThreadsPrimary : totalThreadsPrimary / blockThreadsPrimary + 1;
-
-	primaryRay<<<totalBlocksPrimary, blockThreadsPrimary >>>(raymarchSteps, raymarchDistance, width, height, primaryWidth, primaryHeight, rot, pos);
 
 	int blockThreads = 256;
 	int totalThreads = height * width;
 	int totalBlocks = totalThreads % blockThreads == 0 ? totalThreads / blockThreads : totalThreads / blockThreads + 1;
 
-	cudaThreadSynchronize(); // Make sure all primary rays are done
+	if (lod != 1) {
+		// Allocate raymarchSteps and raymarchDistance
+		unsigned char* raymarchSteps;
+		float * raymarchDistance;
 
-	secondaryRay<<<totalBlocks, blockThreads >>>(pixels, raymarchSteps, raymarchDistance, width, height, primaryWidth, primaryHeight, rot, pos);
+		unsigned int primaryWidth = width % primRays == 0 ? width / primRays : width / primRays + 1;
+		unsigned int primaryHeight = height % primRays == 0 ? height / primRays : height / primRays + 1;
+		unsigned int primarySize = primaryWidth * primaryHeight;
 
-	cudaThreadSynchronize(); // Synchronize secondary rays
+		cudaMalloc((void**)&raymarchSteps, sizeof(unsigned char) * primarySize); // Do only once?
+		cudaMalloc((void**)&raymarchDistance, sizeof(float) * primarySize); // Do only once?
 
-	cudaFree(raymarchSteps); // Do only once?
-	cudaFree(raymarchDistance); // Do only once?
+		int blockThreadsPrimary = 256;
+		int totalThreadsPrimary = primarySize;
+		int totalBlocksPrimary = totalThreadsPrimary % blockThreadsPrimary == 0 ? totalThreadsPrimary / blockThreadsPrimary : totalThreadsPrimary / blockThreadsPrimary + 1;
+
+		primaryRay<<<totalBlocksPrimary, blockThreadsPrimary >> >(raymarchSteps, raymarchDistance, width, height, primaryWidth, primaryHeight, rot, pos);
+
+		cudaThreadSynchronize(); // Make sure all primary rays are done
+
+		secondaryRay<<<totalBlocks, blockThreads >> >(pixels, raymarchSteps, raymarchDistance, width, height, primaryWidth, primaryHeight, rot, pos);
+
+		cudaThreadSynchronize(); // Synchronize secondary rays
+
+		cudaFree(raymarchSteps); // Do only once?
+		cudaFree(raymarchDistance); // Do only once?
+	} else {
+		kernel<<<totalBlocks, blockThreads >>>(pixels, width, height, rot, pos);
+
+		cudaThreadSynchronize(); // Synchronize secondary rays
+	}
 }
 
 
@@ -288,10 +304,10 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 	if (index >= primaryHeight*primaryWidth) {
 		return;
 	}
-	int squareRadius = ACCSECONDARYSQUARE / 2;
+	int squareRadius = AmountOfPrimaryRays / 2;
 
-	const unsigned int x = squareRadius + ACCSECONDARYSQUARE * (index % primaryWidth);
-	const unsigned int y = squareRadius + ACCSECONDARYSQUARE * (index / primaryWidth);
+	const unsigned int x = squareRadius + AmountOfPrimaryRays * (index % primaryWidth);
+	const unsigned int y = squareRadius + AmountOfPrimaryRays * (index / primaryWidth);
 
 	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), height / 2.f);
 	direction = rotation*direction;
@@ -326,7 +342,7 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 				distance = d;
 				steps = i;
 				break;
-			} 
+			}
 			position += de * direction;
 		}
 
@@ -348,7 +364,7 @@ __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float
 
 	const unsigned int x = index % width;
 	const unsigned int y = index / width;
-	const unsigned int primaryIndex = x / ACCSECONDARYSQUARE + (y / ACCSECONDARYSQUARE) * primaryWidth;
+	const unsigned int primaryIndex = x / AmountOfPrimaryRays + (y / AmountOfPrimaryRays) * primaryWidth;
 
 	// Calculate start position from primary ray
 	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), height / 2);
@@ -383,11 +399,11 @@ __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float
 		//float maxColor = 1.5f;
 		//float color = glm::length(pos) -0.65f;
 		//float maxColor = 0.5f;
-		
+
 		//float color = MaxRaymarchSteps - (steps * (1 - glm::length(pos) / 1.5f));
 		//float maxColor = MaxRaymarchSteps;
 
-		
+
 		glm::vec3 zz = pos;
 		float m = glm::dot(zz, zz);
 
@@ -431,7 +447,7 @@ __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float
 		bool orbitcolor = false; // TODO 
 
 		pixels[index].w = 0;
-		if (orbitcolor) {	
+		if (orbitcolor) {
 			// Orbittrap
 			pixels[index].x = (int)(orbittrap.x * 255.f) & 0xff;
 			pixels[index].y = (int)(orbittrap.y * 255.f) & 0xff;
@@ -470,8 +486,15 @@ cudaEventElapsedTime(&time, start, stop);
 printf("Time %f", time);
 */
 
-__global__ void setUp(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps) {
+__global__ void setUp(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps, unsigned int amountPrimary) {
 	EpsilonRaymarch = epsilon;
 	FractalIterations = fractalIterations;
 	MaxRaymarchSteps = raymarchsteps;
+	if (amountPrimary == 1) {
+		AmountOfPrimaryRays = 1;
+		PrimaryRays = false;
+	} else {
+		AmountOfPrimaryRays = amountPrimary;
+		PrimaryRays = true;
+	}
 }
