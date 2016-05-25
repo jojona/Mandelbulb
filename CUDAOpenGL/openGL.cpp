@@ -18,6 +18,7 @@ extern GLuint pbo;
 
 int frames;
 long lasttime;
+long lastUpdateTime;
 
 // Camera position and controls
 glm::vec3 cameraPosition;
@@ -32,19 +33,20 @@ float yaw;
 float pitch;
 
 // Constants
-float sprintSpeed = 3;
-const float rotSpeed = 0.001;
-const float mouseStillDistance = 5;
-const float moveSpeed = .2f;
+const float sprintSpeed = 3.f;
+const float rotSpeed = 0.00001f;
+const float mouseStillDistance = 5.f;
+const float moveSpeed = 0.001f;
 
 bool* keyPressed;
+
 
 void initGL(int argc, char **argv) {
 	// Create a window and GL context (also register callbacks)
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
 	glutInitWindowSize(window_width, window_height);
-	glutInitWindowPosition(300, 300);
+	glutInitWindowPosition(10, 10);
 	glutCreateWindow("Raymarching");
 	glutDisplayFunc(display);
 	glutKeyboardFunc(keyboard);
@@ -218,15 +220,21 @@ void calculateRotation() {
 	glm::normalize(right);
 	glm::normalize(up);
 	glm::normalize(forward);
-
 }
 
 /*
  * Update the camera
  */
 void update() {
+
+	long time = glutGet(GLUT_ELAPSED_TIME);
+
+	float dt = time - lastUpdateTime;
+	lastUpdateTime = time;
+
 	glm::vec3 movement(0, 0, 0);
 	bool sprint = false;
+	bool slow = false;
 
 	if (keyPressed['a']) {
 		// left 
@@ -255,15 +263,22 @@ void update() {
 	if (keyPressed['z']) {
 		sprint = true;
 	}
+	if (keyPressed['x'] ||keyPressed[' ']) {
+		slow = true;
+	}
 
-	yaw += mouseSpeed.x;
-	pitch += mouseSpeed.y;
+	float slowSpeed = glm::length(cameraPosition) / 10;
+	slowSpeed = slowSpeed > 1.0f ? 1.0f : slowSpeed;
 
-	sprintSpeed = glm::length(cameraPosition) / 10;
-	sprintSpeed = sprintSpeed > 3.0f ? 3.0f : sprintSpeed;
 
+	movement = (sprint ? movement * sprintSpeed : movement);
+	movement = (slow ? movement * slowSpeed : movement);
+
+	// Update camera
+	yaw += mouseSpeed.x * dt;
+	pitch += mouseSpeed.y * dt;
 	calculateRotation();
-	cameraPosition += sprint ? movement * sprintSpeed : movement;
+	cameraPosition += movement *dt;
 }
 
 /*
@@ -288,5 +303,4 @@ void setView(glm::vec3 pos, float yawangle, float pitchangle) {
 	mousePos = glm::vec2(0, 0);
 	mouseSpeed = glm::vec2(0, 0);
 	mouseDown = false;
-
 }

@@ -4,9 +4,13 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <device_launch_parameters.h>
+#include <math_constants.h>
 
 #include "kernel.h"
 //#include "constants.h"
+
+#define CAMERALIGHT 0
+#define CIRCLETINT 0
 
 __device__ float EpsilonRaymarch = 0;
 __device__ unsigned int MaxRaymarchSteps = 0;
@@ -154,19 +158,67 @@ __device__ bool PlaneFloor(const glm::vec3& dir, const glm::vec3& pos) {
 	return false;
 }
 
-__device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 direction, glm::vec3 pos, unsigned int index) {
+__device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 rayDir, glm::vec3 rayOrigin, glm::vec3 position, int index) {
 	// Draw color to pixels
 	if (hit) {
+		float normalEpsilon = 0.000001f; // TODO find a good epsilon for normal
+		glm::vec3 normal(DE(position + glm::vec3(normalEpsilon, 0, 0)) - DE(position - glm::vec3(normalEpsilon, 0, 0)),
+			DE(position + glm::vec3(0, normalEpsilon, 0)) - DE(position - glm::vec3(0, normalEpsilon, 0)),
+			DE(position + glm::vec3(0, 0, normalEpsilon)) - DE(position - glm::vec3(0, 0, normalEpsilon)));
+		normal = normalize(normal);
+
+		glm::vec3 lightPower(0.f, 0.f, 0.f);
+
+		// Global illumination
+		lightPower += glm::vec3(0.1f, 0.1f, 0.1f);
+
+		// Light 1, 2, 3
+		// Light side
+		lightPower += light(glm::vec3(2.0f, 0.f, -2.f), glm::vec3(1.f, 1.f, 1.f) * 24.f, position, normal, true);
+		// Light below
+		lightPower += light(glm::vec3(0.f, 2.f, 0.5f), glm::vec3(1.f, 1.f, 1.f)* 5.f, position, normal, true);
+		// Light above
+		lightPower += light(glm::vec3(0.f, -2.f, 0.5f), glm::vec3(1.f, 1.f, 1.f)* 5.f, position, normal, true);
+
+#if CIRCLETINT
+		float tintFactor = 5.f;
+		if (iteration % 1000 < 600) {
+			lightPower += light(glm::vec3(3.0f, 1.f, 0.f), glm::vec3(1.f, 0.f, 0.f) *tintFactor, position, normal, true);
+			lightPower += light(glm::vec3(0.0f, 1.f, 3.f), glm::vec3(1.f, 0.f, 0.f) * tintFactor, position, normal, true);
+			lightPower += light(glm::vec3(0.0f, 1.f, -3.f), glm::vec3(1.f, 0.f, 0.f) * tintFactor, position, normal, true);
+			lightPower += light(glm::vec3(-3.0f, 1.f, 0.f), glm::vec3(1.f, 0.f, 0.f) * tintFactor, position, normal, true);
+		} else {
+			lightPower += light(glm::vec3(3.0f, 1.f, 0.f), glm::vec3(0.f, 1.f, 0.f)* tintFactor, position, normal, true);
+			lightPower += light(glm::vec3(0.0f, 1.f, 3.f), glm::vec3(0.f, 1.f, 0.f)* tintFactor, position, normal, true);
+			lightPower += light(glm::vec3(0.0f, 1.f, -3.f), glm::vec3(0.f, 1.f, 0.f)* tintFactor, position, normal, true);
+			lightPower += light(glm::vec3(-3.0f, 1.f, 0.f), glm::vec3(0.f, 1.f, 0.f)* tintFactor, position, normal, true);
+		}
+#endif
+		
+#if CAMERALIGHT
+		// Use camera as a light
+		lightPower += light(rayOrigin, glm::vec3(1.f, 1.f, 1.f) * 5.f, position, normal, false);
+#endif	
+		// Clamping
+		lightPower = glm::min(glm::vec3(1.f, 1.f, 1.f), lightPower);
+		lightPower = glm::max(glm::vec3(0.f, 0.f, 0.f), lightPower);
+
+		/* // Raymarch step coloring
 		float color = MaxRaymarchSteps - steps;
 		float maxColor = MaxRaymarchSteps;
-		
 		pixels[index].w = 0;
 		pixels[index].x = (int)(color*255.f / maxColor) & 0xff;
 		pixels[index].y = (int)(color*255.f / maxColor) & 0xff;
 		pixels[index].z = (int)(color*255.f / maxColor) & 0xff;
+		*/
+
+		pixels[index].w = 0;
+		pixels[index].x = lightPower.x * 255.f;
+		pixels[index].y = lightPower.y * 255.f;
+		pixels[index].z = lightPower.z * 255.f;
 	} else {
-		if (PlaneFloor(direction, pos)) {
-			if (iteration % 1000 < 980) {
+		if (PlaneFloor(rayDir, rayOrigin)) {
+			if (iteration % 1000 < 600) {
 				pixels[index].w = 0;
 				pixels[index].x = 255 & 0xff;
 				pixels[index].y = 0 & 0xff;
@@ -187,6 +239,46 @@ __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 di
 	}
 }
 
+__device__ glm::vec3 light(const glm::vec3& lightPos, const glm::vec3& lightColor, const glm::vec3& position, const glm::vec3& normal, bool calcShadow) {
+	if (calcShadow && (shadow(lightPos, position))) {
+		return glm::vec3(0.f, 0.f, 0.f);
+	}
+	glm::vec3 radius(lightPos - position);
+	return glm::vec3(lightColor * fmaxf(dot(normal, normalize(radius)), 0) / (4 * CUDART_PI_F * length(radius)*length(radius)));
+}
+
+__device__ bool shadow(const glm::vec3& lightPos, const glm::vec3& position) {
+	float de = 0.0f; // Maybe create an Estimate or calculation of first circle
+	float d = de;
+
+	glm::vec3 pos(lightPos);
+	glm::vec3 direction(position - lightPos);
+
+	glm::vec3 dir = normalize(direction);
+
+	bool hit = false;
+
+	for (int i = 0; i < MaxRaymarchSteps; ++i) {
+		de = DE(pos);
+		d += de;
+		pos += de * dir;
+		if (de <= EpsilonRaymarch) {
+			hit = true;
+			break;
+		}
+	}
+
+	if (!hit) {
+		return false;
+	}
+
+	if (length(direction) - 2 * EpsilonRaymarch > d) {
+		return true;
+	}
+	return false;
+}
+
+
 
 extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int height, glm::mat3 rot, glm::vec3 pos) {
 
@@ -205,10 +297,10 @@ extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int he
 		setUp<<<1, 1>>>(.0005f, 10, 60, 3);
 		primRays = 3;
 	} else if (lod == 4) {
-		setUp<<<1, 1>>>(0.0001f, 10, 120, 1);
+		setUp<<<1, 1>>>(0.005f, 10, 120, 1);
 		primRays = 1;
 	} else {
-		printf("Undefined LOD");
+		printf("Error - Undefined LOD");
 	}
 
 	cudaThreadSynchronize();
@@ -284,6 +376,7 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 		for (int i = 0; i < MaxRaymarchSteps; ++i) {
 			de = DE(position);
 			d += de;
+			position += de * direction;
 
 			// Check if all rays are inside here
 			if (length(cross(secondDir, position - origin)) > de) {
@@ -295,7 +388,6 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 				steps = i;
 				break;
 			}
-			position += de * direction;
 		}
 
 	}
@@ -334,16 +426,16 @@ __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float
 			secondarySteps++;
 			float de = DE(pos);
 			distance += de;
+			pos += de * direction;
 			if (de <= EpsilonRaymarch) {
 				hit = true;
 				steps = i;
 				break;
 			}
-			pos += de * direction;
 		}
 	}
 
-	color(pixels, hit, steps, direction, position, index);
+	color(pixels, hit, steps, direction, position, pos, index);
 
 
 }
@@ -374,17 +466,17 @@ __global__ void singleRay(uchar4* pixels, unsigned int width, unsigned int heigh
 		for (int i = steps; i < MaxRaymarchSteps; ++i) {
 			float de = DE(pos);
 			distance += de;
+			pos += de * direction;
 			if (de <= EpsilonRaymarch) {
 				hit = true;
 				steps = i;
 				break;
 			}
-			pos += de * direction;
 		}
 	}
 
 
-	color(pixels, hit, steps, direction, position, index);
+	color(pixels, hit, steps, direction, position, pos, index);
 }
 
 __global__ void setUp(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps, unsigned int priSize) {
