@@ -19,6 +19,8 @@ struct cudaGraphicsResource * cuda_pbo;
 
 void createPBO(GLuint* pbo) {
 	if (pbo) {
+
+
 		// set up vertex data parameter
 		int num_texels = window_width * window_height;
 		int num_values = num_texels * 4;
@@ -29,7 +31,7 @@ void createPBO(GLuint* pbo) {
 		// Make this the current UNPACK buffer (OpenGL is state-based)
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, *pbo);
 		// Allocate data for the buffer. 4-channel 8-bit image
-		glBufferData(GL_PIXEL_UNPACK_BUFFER, size_tex_data, NULL, GL_DYNAMIC_COPY);
+		glBufferData(GL_PIXEL_UNPACK_BUFFER, size_tex_data, NULL, GL_DYNAMIC_DRAW);
 
 		// Register buffer
 		cudaGraphicsGLRegisterBuffer(&cuda_pbo, *pbo, cudaGraphicsMapFlagsWriteDiscard);
@@ -58,18 +60,15 @@ void createTexture(GLuint* textureID, unsigned int size_x, unsigned int size_y) 
 	// Make this the current texture (remember that GL is state-based)
 	glBindTexture(GL_TEXTURE_2D, *textureID);
 
-	// Allocate the texture memory. The last parameter is NULL since we only
-	// want to allocate memory, not initialize it
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, window_width, window_height, 0,
-		GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+	// set basic parameters
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-	// Must set the filter mode, GL_LINEAR enables interpolation when scaling
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	// Note: GL_TEXTURE_RECTANGLE_ARB may be used instead of
-	// GL_TEXTURE_2D for improved performance if linear interpolation is
-	// not desired. Replace GL_LINEAR with GL_NEAREST in the
-	// glTexParameteri() call
+	// Create texture data (4-component unsigned byte)
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, size_x, size_y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
 }
 
 void deleteTexture(GLuint* tex) {
@@ -92,14 +91,8 @@ void runCuda(glm::mat3 rot, glm::vec3 campos) {
 	size_t num_bytes;
 	cudaGraphicsMapResources(1, &cuda_pbo, 0);
 
-	// TODO set flags 
-	//cudaGraphicsResourceSetMapFlags()
-
 	// Get Address for kernel 
 	cudaGraphicsResourceGetMappedPointer((void**)&dptr, &num_bytes, cuda_pbo);
-
-	// execute the kernel
-	//launch_kernel(dptr, window_width, window_height, rot, campos);
 
 	launchKernel(dptr, window_width, window_height, rot, campos);
 

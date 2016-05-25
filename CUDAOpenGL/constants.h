@@ -13,5 +13,4 @@ const unsigned int window_height = 720;
 const unsigned int window_width = 512;
 const unsigned int window_height = 512;
 //*/
-
 #endif CONSTANTS_H

@@ -11,8 +11,10 @@
 __device__ float EpsilonRaymarch = 0;
 __device__ unsigned int MaxRaymarchSteps = 0;
 __device__ unsigned int FractalIterations = 0;
-__device__ bool PrimaryRays = true;
+__device__ bool PrimaryRays = false;
 __device__ unsigned int PrimarySize = 0;
+__device__ unsigned int iteration = 0;
+
 
 void checkCUDAError(const char *msg) {
 	cudaError_t err = cudaGetLastError();
@@ -21,9 +23,9 @@ void checkCUDAError(const char *msg) {
 	}
 }
 
-__device__ float DE(glm::vec3 pos) {
-	return DEMandelbulb2(pos);
-	//return DEMandelbulb1(pos);
+__device__ float DE(const glm::vec3& pos) {
+	//return DEMandelbulb2(pos);
+	return DEMandelbulb1(pos);
 	//return DETetredon(pos);
 	//return DESphere1(pos);
 }
@@ -31,8 +33,8 @@ __device__ float DE(glm::vec3 pos) {
 /*
  * Distance Estiamtor for a Sphere in origo with radius 3
  */
-__device__ float DESphere1(glm::vec3 pos) {
-	float distance = glm::length(pos);
+__device__ float DESphere1(const glm::vec3& pos) {
+	float distance = length(pos);
 	if (distance > 3) {
 		distance = distance - 3;
 	} else {
@@ -44,7 +46,8 @@ __device__ float DESphere1(glm::vec3 pos) {
 /*
  * Distance estimator for a Tetredon.
  */
-__device__ float DETetredon(glm::vec3 z) {
+__device__ float DETetredon(const glm::vec3& pos) {
+	glm::vec3 z(pos);
 	float Scale = 2.f;
 
 	glm::vec3 a1(1, 1, 1);
@@ -55,63 +58,69 @@ __device__ float DETetredon(glm::vec3 z) {
 	int n = 0;
 	float dist, d;
 	while (n < FractalIterations) {
-		c = a1; dist = glm::length(z - a1);
-		d = glm::length(z - a2); if (d < dist) { c = a2; dist = d; }
-		d = glm::length(z - a3); if (d < dist) { c = a3; dist = d; }
-		d = glm::length(z - a4); if (d < dist) { c = a4; dist = d; }
+		c = a1; dist = length(z - a1);
+		d = length(z - a2); if (d < dist) { c = a2; dist = d; }
+		d = length(z - a3); if (d < dist) { c = a3; dist = d; }
+		d = length(z - a4); if (d < dist) { c = a4; dist = d; }
 		z = Scale*z - c*(Scale - 1.0f);
 		n++;
 	}
 
-	return glm::length(z) * pow(Scale, float(-n));
+	return length(z) * pow(Scale, float(-n));
+
 }
 
 /*
 * Distance estimator for a Mandelbulb. Version 1
 */
-__device__ float DEMandelbulb1(glm::vec3 p) {
+__device__ float DEMandelbulb1(const glm::vec3& p) {
 	glm::vec3 z = p;
 	float r = 0.0f;
 	float dr = 1.0f;
 	for (int i = 0; i < FractalIterations; ++i) {
-		r = glm::length(z);
+		r = length(z);
 		if (r > 8.0f) break;
 
-		float theta = glm::acos(z.y / r);
-		float phi = glm::atan(z.x, z.z);
+		// To polar coordianates
+		float theta = acosf(z.y / r);
+		float phi = atan2f(z.x, z.z);
 		float r7 = r*r*r*r*r*r*r; // glm::pow(r, 7.0f);
 
+		// Derivative
 		dr = r7 * 8.0f * dr + 1.0f;
 
+		// "Squaring" the length
 		float zr = r7*r;
+		// "Double" the angle
 		theta = theta*8.0f;
 		phi = phi * 8.0f;
 
-		z = p + zr*glm::vec3(glm::sin(phi)*glm::sin(theta), glm::cos(theta), glm::sin(theta) * glm::cos(phi));
+		// From polar coordianates
+		z = p + zr*glm::vec3(sinf(phi)*sinf(theta), cosf(theta), sinf(theta) * cosf(phi));
 	}
-	return 0.5f*glm::log(r)*r / dr;
+	return 0.5f*logf(r)*r / dr;
 }
 
 /*
  * Distance estimator for a Mandelbulb. Version 2
  */
-__device__ float DEMandelbulb2(glm::vec3 pos) {
+__device__ float DEMandelbulb2(const glm::vec3& pos) {
 	glm::vec3 zz = pos;
-	float m = glm::dot(zz, zz);
+	float m = dot(zz);
 
 	float dz = 1.0f;
 
 	for (int i = 0; i < FractalIterations; ++i) {
 		float m2 = m*m;
 		float m4 = m2*m2;
-		dz = 8.0f*glm::sqrt(m4*m2*m)*dz + 1.0f;
+		dz = 8.0f*sqrtf(m4*m2*m)*dz + 1.0f;
 
 		float x = zz.x; float x2 = zz.x*zz.x; float x4 = x2*x2;
 		float y = zz.y; float y2 = zz.y* zz.y; float y4 = y2*y2;
 		float z = zz.z; float z2 = zz.z*zz.z; float z4 = z2*z2;
 
 		float k3 = x2 + z2;
-		float k2 = 1.f / glm::sqrt(k3*k3*k3*k3*k3*k3*k3);
+		float k2 = 1.f / sqrtf(k3*k3*k3*k3*k3*k3*k3);
 		float k1 = x4 + y4 + z4 - 6.0f*y2*z2 - 6.0f*x2*y2 + 2.0f*z2*x2;
 		float k4 = x2 - y2 + z2;
 
@@ -119,25 +128,24 @@ __device__ float DEMandelbulb2(glm::vec3 pos) {
 		zz.y = pos.y + -16.0f*y2*k3*k4*k4 + k1*k1;
 		zz.z = pos.z + -8.0f*y*k4*(x4*x4 - 28.0f*x4*x2*z2 + 70.0f*x4*z4 - 28.0f*x2*z2*z4 + z4*z4)*k1*k2;
 
-		m = glm::dot(zz, zz);
+		m = dot(zz);
 		if (m > 1000.0f)
 			break;
 	}
 
-	return 0.25f*glm::log(m)*glm::sqrt(m) / dz;
+	return 0.25f*logf(m)*sqrtf(m) / dz;
 }
 
-__device__ bool BoundingSphere(glm::vec3 dir, glm::vec3 pos) {
-	return !(glm::length(glm::cross(dir, -pos)) > 1.2f);
+__device__ bool BoundingSphere(const glm::vec3& dir, const glm::vec3& pos) {
+	return !(length(cross(dir, -pos)) > 1.2f);
 }
 
-__device__ bool PlaneFloor(glm::vec3 dir, glm::vec3 pos) {
-	float denom = glm::dot(glm::vec3(0, 1, 0), dir);
-	if (denom > 0.0001f) // Only visible from above
-	{
-		float t = glm::dot(glm::vec3(0, 1.1f, 0) - pos, (glm::vec3(0, 1, 0))) / denom;
+__device__ bool PlaneFloor(const glm::vec3& dir, const glm::vec3& pos) {
+	float denom = dot(glm::vec3(0, 1, 0), dir);
+	if (denom > 0.0001f) { // Only visible from above
+		float t = dot(glm::vec3(0, 1.1f, 0) - pos, (glm::vec3(0, 1, 0))) / denom;
 		if (t >= 0) {
-			float distanceFromOrigo = glm::length(pos + t * dir);
+			float distanceFromOrigo = length(pos + t * dir);
 			if (distanceFromOrigo > 3 && distanceFromOrigo < 7) {
 				return true;
 			}
@@ -151,81 +159,31 @@ __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 di
 	if (hit) {
 		float color = MaxRaymarchSteps - steps;
 		float maxColor = MaxRaymarchSteps;
-		//float color = 1.5f + distance - glm::length(position);
-		//float maxColor = 1.5f;
-		//float color = glm::length(pos) -0.65f;
-		//float maxColor = 0.5f;
-
-		//float color = MaxRaymarchSteps - (steps * (1 - glm::length(pos) / 1.5f));
-		//float maxColor = MaxRaymarchSteps;
-
-		/*
-		glm::vec3 zz = pos;
-		float m = glm::dot(zz, zz);
-
-		glm::vec3 orbittrap(abs(zz.x), abs(zz.y), abs(zz.z)); // DO not glm::abs here
-
-		float dz = 1.0f;
-
-		for (int i = 0; i < FractalIterations; ++i) {
-			float m2 = m*m;
-			float m4 = m2*m2;
-			dz = 8.0f*glm::sqrt(m4*m2*m)*dz + 1.0f;
-
-			float x = zz.x; float x2 = zz.x*zz.x; float x4 = x2*x2;
-			float y = zz.y; float y2 = zz.y* zz.y; float y4 = y2*y2;
-			float z = zz.z; float z2 = zz.z*zz.z; float z4 = z2*z2;
-
-			float k3 = x2 + z2;
-			float k2 = 1.f / glm::sqrt(k3*k3*k3*k3*k3*k3*k3);
-			float k1 = x4 + y4 + z4 - 6.0f*y2*z2 - 6.0f*x2*y2 + 2.0f*z2*x2;
-			float k4 = x2 - y2 + z2;
-
-			zz.x = pos.x + 64.0f*x*y*z*(x2 - z2)*k4*(x4 - 6.0f*x2*z2 + z4)*k1*k2;
-			zz.y = pos.y + -16.0f*y2*k3*k4*k4 + k1*k1;
-			zz.z = pos.z + -8.0f*y*k4*(x4*x4 - 28.0f*x4*x2*z2 + 70.0f*x4*z4 - 28.0f*x2*z2*z4 + z4*z4)*k1*k2;
-
-			orbittrap = glm::min(orbittrap, glm::vec3(abs(zz.x), abs(zz.y), abs(zz.z))); // Do not glm::abs here
-
-			m = glm::dot(zz, zz);
-			if (m > 1000.0f)
-				break;
-
-			if (glm::length(glm::vec3(x, y, z)) > 2) {
-				dz = i;
-				break;
-			}
-		}
-		//color = FractalIterations - dz;
-		//maxColor = FractalIterations;
-		//printf("%f %f %f\n", orbittrap.x, orbittrap.y, orbittrap.z);
-
-		*/
-		//bool orbitcolor = false; // TODO 
-
+		
 		pixels[index].w = 0;
-		//if (orbitcolor) {
-			// Orbittrap
-			//pixels[index].x = (int)(orbittrap.x * 255.f) & 0xff;
-			//pixels[index].y = (int)(orbittrap.y * 255.f) & 0xff;
-			//pixels[index].z = (int)(orbittrap.z * 255.f) & 0xff;
-		//} else {
-			pixels[index].x = (int)(color*255.f / maxColor) & 0xff;
-			pixels[index].y = (int)(color*255.f / maxColor) & 0xff;
-			pixels[index].z = (int)(color*255.f / maxColor) & 0xff;
-		//}
+		pixels[index].x = (int)(color*255.f / maxColor) & 0xff;
+		pixels[index].y = (int)(color*255.f / maxColor) & 0xff;
+		pixels[index].z = (int)(color*255.f / maxColor) & 0xff;
 	} else {
-		//if (PlaneFloor(direction, pos)) {
-			pixels[index].w = 0;
-			pixels[index].x = 255 & 0xff;
-			pixels[index].y = 0 & 0xff;
-			pixels[index].z = 0 & 0xff;
-		//} else {
+		if (PlaneFloor(direction, pos)) {
+			if (iteration % 1000 < 980) {
+				pixels[index].w = 0;
+				pixels[index].x = 255 & 0xff;
+				pixels[index].y = 0 & 0xff;
+				pixels[index].z = 0 & 0xff;
+			} else {
+				pixels[index].w = 0;
+				pixels[index].x = 0 & 0xff;
+				pixels[index].y = 255 & 0xff;
+				pixels[index].z = 0 & 0xff;
+			}
+		} else {
 			pixels[index].w = 0;
 			pixels[index].x = 0;
 			pixels[index].y = 0;
 			pixels[index].z = 0;
-		//}
+		}
+
 	}
 }
 
@@ -238,16 +196,16 @@ extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int he
 	unsigned int primRays;
 
 	if (lod == 1) {
-		setUp << <1, 1 >> >(.01f, 5, 120, 9);
+		setUp << <1, 1 >> >(.0005f, 10, 120, 9);
 		primRays = 9;
 	} else if (lod == 2) {
-		setUp << <1, 1 >> >(.0005f, 10, 60, 5);
+		setUp<<<1, 1>>>(.0005f, 10, 60, 5);
 		primRays = 5;
 	} else if (lod == 3) {
-		setUp << <1, 1 >> >(.0005f, 10, 60, 3);
+		setUp<<<1, 1>>>(.0005f, 10, 60, 3);
 		primRays = 3;
 	} else if (lod == 4) {
-		setUp << <1, 1 >> >(0.0005f, 6, 60, 1);
+		setUp<<<1, 1>>>(0.0001f, 10, 120, 1);
 		primRays = 1;
 	} else {
 		printf("Undefined LOD");
@@ -306,11 +264,11 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 
 	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), height / 2.f);
 	direction = rotation*direction;
-	direction = glm::normalize(direction);
+	direction = normalize(direction);
 
 	glm::vec3 secondDir(x + squareRadius - (width / 2.f), y + squareRadius - (height / 2.f), height / 2.f);
 	secondDir = rotation*secondDir;
-	secondDir = glm::normalize(secondDir);
+	secondDir = normalize(secondDir);
 	glm::vec3 origin(position);
 
 	float distance = 0;
@@ -328,7 +286,7 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 			d += de;
 
 			// Check if all rays are inside here
-			if (glm::length(glm::cross(secondDir, position - origin)) > de) {
+			if (length(cross(secondDir, position - origin)) > de) {
 				de = 0.0f; // TODO change to boolean
 			}
 
@@ -363,7 +321,7 @@ __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float
 	// Calculate start position from primary ray
 	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), height / 2);
 	direction = rotation*direction;
-	direction = glm::normalize(direction);
+	direction = normalize(direction);
 
 	int steps = raymarchSteps[primaryIndex];
 	float distance = raymarchDistance[primaryIndex];
@@ -385,7 +343,7 @@ __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float
 		}
 	}
 
-	color(pixels, hit, steps, direction, pos, index);
+	color(pixels, hit, steps, direction, position, index);
 
 
 }
@@ -404,7 +362,7 @@ __global__ void singleRay(uchar4* pixels, unsigned int width, unsigned int heigh
 	// Calculate start position from primary ray
 	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), height / 2);
 	direction = rotation*direction;
-	direction = glm::normalize(direction);
+	direction = normalize(direction);
 
 	glm::vec3 pos = position;
 	bool hit = false;
@@ -440,6 +398,7 @@ __global__ void setUp(float epsilon, unsigned int fractalIterations, unsigned in
 		PrimarySize = priSize;
 		PrimaryRays = true;
 	}
+	iteration++;
 }
 
 /*

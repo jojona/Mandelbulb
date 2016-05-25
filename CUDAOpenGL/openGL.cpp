@@ -32,7 +32,7 @@ float yaw;
 float pitch;
 
 // Constants
-const float sprintSpeed = 5;
+float sprintSpeed = 3;
 const float rotSpeed = 0.001;
 const float mouseStillDistance = 5;
 const float moveSpeed = .2f;
@@ -100,11 +100,6 @@ void display() {
 
 	// bind texture from PBO
 	glBindTexture(GL_TEXTURE_2D, textureID);
-
-	// Note: glTexSubImage2D will perform a format conversion if the
-	// buffer is a different format from the texture. We created the
-	// texture with format GL_RGBA8. In glTexSubImage2D we specified
-	// GL_BGRA and GL_UNSIGNED_INT. This is a fast-path combination
 
 	// Note: NULL indicates the data resides in device memory
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, window_width, window_height,
@@ -263,6 +258,9 @@ void update() {
 
 	yaw += mouseSpeed.x;
 	pitch += mouseSpeed.y;
+
+	sprintSpeed = glm::length(cameraPosition) / 10;
+	sprintSpeed = sprintSpeed > 3.0f ? 3.0f : sprintSpeed;
 
 	calculateRotation();
 	cameraPosition += sprint ? movement * sprintSpeed : movement;
