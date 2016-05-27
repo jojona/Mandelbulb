@@ -48,7 +48,7 @@ float r;
 const float mouseStillDistance = 5.f;
 const unsigned int fracItDelta = 1;
 const unsigned int raymarchDelta = 10;
-const unsigned int priDelta = 1;
+const unsigned int priDelta = 2;
 const float orbVel = 0.001f;
 
 
@@ -179,26 +179,29 @@ void keyboard(unsigned char key, int x, int y) {
 			savedUp = up;
 			r = glm::sqrt(cameraPosition.x*cameraPosition.x + cameraPosition.z*cameraPosition.z);//glm::sqrt(glm::dot(cameraPosition, cameraPosition));
 			orbTime = 0;
-			/*
+			
 			float z = cameraPosition.z;
 			float x = cameraPosition.x;
 			std::cout << "x/z" << x/z << " x: " << x << " z: " << z << " r: " << r << std::endl;
-			if (z < -0.001f){ // TODO THIS IS SHIT
-				orbTime = glm::acos(x/z) + 3.1415927f;
+			if (x < -0.001f){ // TODO THIS IS SHIT
+				orbTime = atan(z/x) + 3.1415927f;
 				
-			} else if (z > 0.001f){
-				orbTime = glm::acos(x/z);
+			} else if (x > 0.001f){
+				orbTime = atan(z/x);
 			}else {
-				if(x > 0.f){
-					orbTime = 0.f;
+				if(z > 0.f){
+					orbTime = 3.1415927f/2;
 				}else{
-					orbTime = 3.1415927f;
+					orbTime = -3.1415927f / 2;
 				}
 			}
 
 			std::cout << "orbTime: " << orbTime << std::endl;
-			*/
+			
 
+		} else {
+			yaw = orbTime + 3.1415927f / 2;
+			calculateRotation();
 		}
 		orbit = !orbit;
 
@@ -211,7 +214,7 @@ void keyboard(unsigned char key, int x, int y) {
 		if(l.epsilon <= epsDelta){
 			epsDelta *= 0.1f;
 		}
-		l.epsilon = (l.epsilon - epsDelta > 0) ?  l.epsilon - epsDelta : l.epsilon;
+		l.epsilon = (l.epsilon > epsDelta) ?  l.epsilon - epsDelta : l.epsilon;
 		std::cout << "epsilon: " << l.epsilon << "\t epsDelta: " << epsDelta << std::endl;
 	} else if (key == 'b'){
 		if(l.epsilon >= epsDelta*10.f){
@@ -225,7 +228,7 @@ void keyboard(unsigned char key, int x, int y) {
 		l.fractalIterations += fracItDelta;
 		std::cout << "fractalIterations: " << l.fractalIterations << std::endl;
 	} else if (key == 'n'){
-		l.fractalIterations = (l.fractalIterations - fracItDelta > 0) ?  l.fractalIterations - fracItDelta : l.fractalIterations;
+		l.fractalIterations = (l.fractalIterations > fracItDelta) ?  l.fractalIterations - fracItDelta : l.fractalIterations;
 		std::cout << "fractalIterations: " << l.fractalIterations << std::endl;
 
 	} 
@@ -234,12 +237,12 @@ void keyboard(unsigned char key, int x, int y) {
 		l.raymarchsteps += raymarchDelta;
 		std::cout << "raymarchsteps: " << l.raymarchsteps << std::endl;
 	} else if (key == 'm'){
-		l.raymarchsteps = (l.raymarchsteps - raymarchDelta > 0) ?  l.raymarchsteps - raymarchDelta : l.raymarchsteps;
+		l.raymarchsteps = (l.raymarchsteps > raymarchDelta) ?  l.raymarchsteps - raymarchDelta : l.raymarchsteps;
 		std::cout << "raymarchsteps: " << l.raymarchsteps << std::endl;
 	} 
 
 	else if (key == 'l'){
-		l.primRays = (l.primRays - priDelta > 0) ?  l.primRays - priDelta : l.primRays;
+		l.primRays = (l.primRays > priDelta) ?  l.primRays - priDelta : l.primRays;
 		std::cout << "primRays: " << l.primRays << std::endl;
 	} else if (key == ','){
 		l.primRays += priDelta;

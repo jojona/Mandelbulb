@@ -279,59 +279,13 @@ __device__ bool shadow(const glm::vec3& lightPos, const glm::vec3& position) {
 
 extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int height, float focalLength, glm::mat3 rot, glm::vec3 pos, LOD l) { // TODO Dela upp lod i 3 param.
 
-	// Change these values if close or far away from the bulb
-	// TODO calculate LOD
-	//unsigned int lod = 4;
-	
-
 	// setUp:
 	// float epsilon, 
 	// int fractalIterations, 
 	// int raymarchsteps, 
 	// int priSize
-
-	// Remember to update LOD_MIN and LOD_MAX if more LOD-options are added (openGL.cpp).
-	// Increments fractalIteration -> epsilon -> raymarchsteps
 	setUp<< <1, 1 >> >(l);
 	unsigned int primRays = l.primRays;
-	/*
-	if (lod == 1) {
-		primRays = 1;
-		setUp << <1, 1 >> >(.001f, 2, 30, primRays);
-	} else if (lod == 2) {
-		primRays = 1;
-		setUp << <1, 1 >> >(.001f, 5, 30, primRays);
-	} else if (lod == 3) {
-		primRays = 1;
-		setUp << <1, 1 >> >(.001f, 5, 30, primRays);
-	} else if (lod == 4) {
-		primRays = 1;
-		setUp << <1, 1 >> >(.001f, 5, 60, primRays);
-	} else if (lod == 5) {
-		primRays = 1;
-		setUp << <1, 1 >> >(.001f, 10, 60, primRays);
-	} else if (lod == 6) {
-		primRays = 1;
-		setUp << <1, 1 >> >(.001f, 10, 60, primRays);
-	} else if (lod == 7) {
-		primRays = 1;
-		setUp << <1, 1 >> >(.001f, 10, 120, primRays);
-	} else if (lod == 8) {
-		primRays = 1;
-		setUp << <1, 1 >> >(.001f, 15, 120, primRays);
-	} else if (lod == 9) {
-		primRays = 1;
-		setUp<<<1, 1>>>(0.001f, 15, 180, primRays);
-	} else if (lod == 10) {
-		primRays = 1;
-		setUp<<<1, 1>>>(0.001f, 15, 240, primRays);
-	} else if (lod == 11) {
-		primRays = 1;
-		setUp<<<1, 1>>>(0.0005f, 15, 300, primRays);
-	} else {
-		printf("Error - Undefined LOD");
-	}
-	*/
 
 	cudaThreadSynchronize();
 
@@ -339,7 +293,7 @@ extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int he
 	int totalThreads = height * width;
 	int totalBlocks = totalThreads % blockThreads == 0 ? totalThreads / blockThreads : totalThreads / blockThreads + 1;
 
-	if (false) {
+	if (primRays > 1) {
 		// Allocate raymarchSteps and raymarchDistance
 		unsigned char* raymarchSteps;
 		float * raymarchDistance;
