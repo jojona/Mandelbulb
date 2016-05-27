@@ -33,12 +33,12 @@ glm::vec2 mouseSpeed;
 bool mouseDown;
 float yaw;
 float pitch;
-float focalLength = window_height / 2.f;
-float moveSpeed = 0.001f;
-float sprintSpeed = 3.f;
+float focalLength;
+float moveSpeed;
+float sprintSpeed;
 LOD l;
 float epsDelta = 0.0002f;
-float rotSpeed = 0.00001f;
+float rotSpeed;
 bool orbit = false;
 float orbTime = 0;
 glm::vec3 savedUp;
@@ -173,31 +173,31 @@ void keyboard(unsigned char key, int x, int y) {
 		setView(glm::vec3(0.020500f, 0.197362f, -0.961050f), 0.117f, -0.151f);
 	} else if (key == '7') {
 		setView(glm::vec3(0, 0, -9.5f), 0, 0);
-	} else if (key == '<'){
-		if(!orbit){
+	} else if (key == '<') {
+		if (!orbit) {
 			calculateRotation();
 			savedUp = up;
 			r = glm::sqrt(cameraPosition.x*cameraPosition.x + cameraPosition.z*cameraPosition.z);//glm::sqrt(glm::dot(cameraPosition, cameraPosition));
 			orbTime = 0;
-			
+
 			float z = cameraPosition.z;
 			float x = cameraPosition.x;
-			std::cout << "x/z" << x/z << " x: " << x << " z: " << z << " r: " << r << std::endl;
-			if (x < -0.001f){ // TODO THIS IS SHIT
-				orbTime = atan(z/x) + 3.1415927f;
-				
-			} else if (x > 0.001f){
-				orbTime = atan(z/x);
-			}else {
-				if(z > 0.f){
-					orbTime = 3.1415927f/2;
-				}else{
+			std::cout << "x/z" << x / z << " x: " << x << " z: " << z << " r: " << r << std::endl;
+			if (x < -0.001f) { // TODO THIS IS SHIT
+				orbTime = atan(z / x) + 3.1415927f;
+
+			} else if (x > 0.001f) {
+				orbTime = atan(z / x);
+			} else {
+				if (z > 0.f) {
+					orbTime = 3.1415927f / 2;
+				} else {
 					orbTime = -3.1415927f / 2;
 				}
 			}
 
 			std::cout << "orbTime: " << orbTime << std::endl;
-			
+
 
 		} else {
 			yaw = orbTime + 3.1415927f / 2;
@@ -210,62 +210,56 @@ void keyboard(unsigned char key, int x, int y) {
 
 	// Upper 4 keys: improve accuracy
 	// Lower 4 keys: decrease accuracy
-	else if (key == 'h'){
-		if(l.epsilon <= epsDelta){
-			epsDelta *= 0.1f;
-		}
-		l.epsilon = (l.epsilon > epsDelta) ?  l.epsilon - epsDelta : l.epsilon;
+	else if (key == 'h') {
+		l.epsilon = (l.epsilon > epsDelta) ? l.epsilon - epsDelta : l.epsilon;
 		std::cout << "epsilon: " << l.epsilon << "\t epsDelta: " << epsDelta << std::endl;
-	} else if (key == 'b'){
-		if(l.epsilon >= epsDelta*10.f){
-			epsDelta *= 10.f;
-		}
+	} else if (key == 'b') {
 		l.epsilon += epsDelta;
 		std::cout << "epsilon: " << l.epsilon << "\t epsDelta:" << epsDelta << std::endl;
-	} 
+	} else if (key == 'y') {
+		epsDelta *= 10;
+		std::cout << "epsDelta:" << epsDelta << std::endl;
+	} else if (key == 'u') {
+		epsDelta /= 10;
+		std::cout << "epsDelta:" << epsDelta << std::endl;
+	}
 
-	else if (key == 'j'){
+	else if (key == 'j') {
 		l.fractalIterations += fracItDelta;
 		std::cout << "fractalIterations: " << l.fractalIterations << std::endl;
-	} else if (key == 'n'){
-		l.fractalIterations = (l.fractalIterations > fracItDelta) ?  l.fractalIterations - fracItDelta : l.fractalIterations;
+	} else if (key == 'n') {
+		l.fractalIterations = (l.fractalIterations > fracItDelta) ? l.fractalIterations - fracItDelta : l.fractalIterations;
 		std::cout << "fractalIterations: " << l.fractalIterations << std::endl;
 
-	} 
+	}
 
-	else if (key == 'k'){
+	else if (key == 'k') {
 		l.raymarchsteps += raymarchDelta;
 		std::cout << "raymarchsteps: " << l.raymarchsteps << std::endl;
-	} else if (key == 'm'){
-		l.raymarchsteps = (l.raymarchsteps > raymarchDelta) ?  l.raymarchsteps - raymarchDelta : l.raymarchsteps;
+	} else if (key == 'm') {
+		l.raymarchsteps = (l.raymarchsteps > raymarchDelta) ? l.raymarchsteps - raymarchDelta : l.raymarchsteps;
 		std::cout << "raymarchsteps: " << l.raymarchsteps << std::endl;
-	} 
+	}
 
-	else if (key == 'l'){
-		l.primRays = (l.primRays > priDelta) ?  l.primRays - priDelta : l.primRays;
+	else if (key == 'l') {
+		l.primRays = (l.primRays > priDelta) ? l.primRays - priDelta : l.primRays;
 		std::cout << "primRays: " << l.primRays << std::endl;
-	} else if (key == ','){
+	} else if (key == ',') {
 		l.primRays += priDelta;
 		std::cout << "primRays: " << l.primRays << std::endl;
 	}
 
-	else if (key == 'o'){
-		std::cout << "LOD: " << std::endl 
-		<< "epsilon:\t \t" << l.epsilon << std::endl 
-		<< "fractalIterations:\t" << l.fractalIterations << std::endl 
-		<< "raymarchsteps:\t \t" << l.raymarchsteps << std::endl 
-		<< "primRays:\t \t" << l.primRays << std::endl;
-	} 
+	else if (key == 'o') {
+		std::cout << "LOD: " << std::endl
+			<< "epsilon:\t \t" << l.epsilon << std::endl
+			<< "fractalIterations:\t" << l.fractalIterations << std::endl
+			<< "raymarchsteps:\t \t" << l.raymarchsteps << std::endl
+			<< "primRays:\t \t" << l.primRays << std::endl;
+	}
 
 	else {
 		keyPressed[key] = true;
 	}
-	// l.epsilon = 0.001f;
-	// l.fractalIterations = 10;
-	// l.raymarchsteps = 120;
-	// l.priSize = 1;
-	// std::cout << "key: " << key << std::endl;
-
 }
 
 
@@ -294,14 +288,14 @@ void mouse(int button, int state, int x, int y) {
 	}
 }
 
-void mouseWheel(int button, int direction, int x, int y){
-	if(direction > 0){
+void mouseWheel(int button, int direction, int x, int y) {
+	if (direction > 0) {
 		//Up
 		sprintSpeed *= 0.91f;
 		moveSpeed *= 0.91f;
 		focalLength *= 1.1f;
 		rotSpeed *= 0.91f;
-	}else{
+	} else {
 		//Down
 		sprintSpeed *= 1.1f;
 		moveSpeed *= 1.1f;
@@ -398,7 +392,7 @@ void update() {
 	if (keyPressed['z']) {
 		sprint = true;
 	}
-	if (keyPressed['x'] ||keyPressed[' ']) {
+	if (keyPressed['x'] || keyPressed[' ']) {
 		slow = true;
 	}
 
@@ -410,11 +404,23 @@ void update() {
 	movement = (slow ? movement * slowSpeed : movement);
 
 	// Update camera
-	if(orbit){
-		
-		cameraPosition = glm::vec3(r*glm::cos(orbTime), cameraPosition.y, r*glm::sin(orbTime)); // TODO THIS IS SHIT
+	if (orbit) {
+		if (keyPressed['w']) {
+			r -= moveSpeed*dt;
+		}  if (keyPressed['s']) {
+			r += moveSpeed*dt;
+		}  if (keyPressed['q']) {
+			cameraPosition.y -= moveSpeed*dt;
+		}  if (keyPressed['e']) {
+			cameraPosition.y += moveSpeed*dt;
+		}
 
-		up = glm::vec3(0,1,0);// glm::normalize(savedUp); 
+
+
+
+		cameraPosition = glm::vec3(r*glm::cos(orbTime), cameraPosition.y, r*glm::sin(orbTime));
+
+		up = glm::vec3(0, 1, 0);
 		forward = glm::normalize(-cameraPosition);
 		right = glm::normalize(glm::cross(up, forward));
 		up = glm::normalize(glm::cross(forward, right));
@@ -432,7 +438,7 @@ void update() {
 	}
 }
 
-void printVec3(glm::vec3 v){
+void printVec3(glm::vec3 v) {
 	std::cout << "(" << v.x << ", " << v.y << ", " << v.z << ")" << std::endl;
 }
 
@@ -458,4 +464,11 @@ void setView(glm::vec3 pos, float yawangle, float pitchangle) {
 	mousePos = glm::vec2(0, 0);
 	mouseSpeed = glm::vec2(0, 0);
 	mouseDown = false;
+
+	focalLength = window_height / 2;
+	sprintSpeed = 3.f;
+	moveSpeed = 0.001f;
+	rotSpeed = 0.00001f;
+
+
 }

@@ -89,7 +89,7 @@ __device__ float DEMandelbulb1(const glm::vec3& p) {
 		// To polar coordianates
 		float theta = acosf(z.y / r);
 		float phi = atan2f(z.x, z.z);
-		float r7 = glm::pow(r, power-1);
+		float r7 = glm::pow(r, power - 1);
 
 		// Derivative
 		dr = r7 * power * dr + 1.0f;
@@ -142,21 +142,40 @@ __device__ float DEMandelbulb2(const glm::vec3& pos) {
 }
 
 __device__ bool BoundingSphere(const glm::vec3& dir, const glm::vec3& pos) {
-	return !(length(cross(dir, -pos)) > 1.2f);
-}
-
-__device__ bool PlaneFloor(const glm::vec3& dir, const glm::vec3& pos) {
-	float denom = dot(glm::vec3(0, 1, 0), dir);
-	if (denom > 0.0001f) { // Only visible from above
-		float t = dot(glm::vec3(0, 1.1f, 0) - pos, (glm::vec3(0, 1, 0))) / denom;
-		if (t >= 0) {
-			float distanceFromOrigo = length(pos + t * dir);
-			if (distanceFromOrigo > 3 && distanceFromOrigo < 7) {
-				return true;
-			}
+	float rSquared = 1.2f * 1.2f;
+	if (dot(pos) <= rSquared) {
+		return true;
+	} else if (dot(pos, dir) <= 0) {
+		glm::vec3 v = pos - dir * dot(pos, dir) / dot(dir);
+		if (dot(v) <= rSquared) {
+			return true;
 		}
 	}
 	return false;
+}
+
+__device__ glm::vec3 PlaneFloor(const glm::vec3& dir, const glm::vec3& pos) {
+	float denom = dot(glm::vec3(0, 1, 0), dir);
+	if (denom > 0.0001f) { // Only visible from above
+		float t = dot(glm::vec3(0, 1.5f, 0) - pos, (glm::vec3(0, 1, 0))) / denom;
+		if (t >= 0) {
+
+			glm::vec3 collision = pos + t * dir;
+			if (((int)floorf(collision.x) % 2 == 0 || (int)floorf(collision.z) % 2 == 0) && !((int)floorf(collision.x) % 2 == 0 && (int)floorf(collision.z) % 2 == 0)) {
+				return glm::vec3(100.f, 100.f, 100.f);
+			} else {
+				return glm::vec3(50.f, 50.f, 50.f);
+			}
+
+			/*
+			float distanceFromOrigo = length(pos + t * dir);
+			if (distanceFromOrigo > 3 && distanceFromOrigo < 7) {
+			return true;
+			}
+			*/
+		}
+	}
+	return glm::vec3(0, 0, 0);
 }
 
 __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 rayDir, glm::vec3 rayOrigin, glm::vec3 position, int index) {
@@ -195,7 +214,7 @@ __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 ra
 			lightPower += light(glm::vec3(-3.0f, 1.f, 0.f), glm::vec3(0.f, 1.f, 0.f)* tintFactor, position, normal, true);
 		}
 #endif
-		
+
 #if CAMERALIGHT
 		// Use camera as a light
 		lightPower += light(rayOrigin, glm::vec3(1.f, 1.f, 1.f) * 5.f, position, normal, false);
@@ -218,24 +237,31 @@ __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 ra
 		pixels[index].y = lightPower.y * 255.f;
 		pixels[index].z = lightPower.z * 255.f;
 	} else {
+		glm::vec3 col = PlaneFloor(rayDir, rayOrigin);
+		pixels[index].w = 0;
+		pixels[index].x = (int)col.x & 0xff;
+		pixels[index].y = (int)col.y & 0xff;
+		pixels[index].z = (int)col.z & 0xff;
+		/*
 		if (PlaneFloor(rayDir, rayOrigin)) {
-			if (iteration % 1000 < 600) {
-				pixels[index].w = 0;
-				pixels[index].x = 0 & 0xff;
-				pixels[index].y = 0 & 0xff;
-				pixels[index].z = 255 & 0xff;
-			} else {
-				pixels[index].w = 0;
-				pixels[index].x = 0 & 0xff;
-				pixels[index].y = 255 & 0xff;
-				pixels[index].z = 0 & 0xff;
-			}
+		if (iteration % 1000 < 600) {
+		pixels[index].w = 0;
+		pixels[index].x = 100 & 0xff;
+		pixels[index].y = 0 & 0xff;
+		pixels[index].z = 0 & 0xff;
 		} else {
-			pixels[index].w = 0;
-			pixels[index].x = 0;
-			pixels[index].y = 0;
-			pixels[index].z = 0;
+		pixels[index].w = 0;
+		pixels[index].x = 0 & 0xff;
+		pixels[index].y = 100 & 0xff;
+		pixels[index].z = 0 & 0xff;
 		}
+		} else {
+		pixels[index].w = 0;
+		pixels[index].x = 0;
+		pixels[index].y = 0;
+		pixels[index].z = 0;
+		}
+		*/
 
 	}
 }
@@ -249,7 +275,7 @@ __device__ glm::vec3 light(const glm::vec3& lightPos, const glm::vec3& lightColo
 }
 
 __device__ bool shadow(const glm::vec3& lightPos, const glm::vec3& position) {
-	float de = 0.0f; 
+	float de = 0.0f;
 	float d = de;
 
 	glm::vec3 pos(lightPos);
@@ -284,7 +310,7 @@ extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int he
 	// int fractalIterations, 
 	// int raymarchsteps, 
 	// int priSize
-	setUp<< <1, 1 >> >(l);
+	setUp << <1, 1 >> >(l);
 	unsigned int primRays = l.primRays;
 
 	cudaThreadSynchronize();
@@ -338,7 +364,7 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 	const unsigned int x = squareRadius + PrimarySize * (index % primaryWidth);
 	const unsigned int y = squareRadius + PrimarySize * (index / primaryWidth);
 
-	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f),  focalLength);
+	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), focalLength);
 	direction = rotation*direction;
 	direction = normalize(direction);
 
@@ -395,7 +421,7 @@ __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float
 	const unsigned int primaryIndex = x / PrimarySize + (y / PrimarySize) * primaryWidth;
 
 	// Calculate start position from primary ray
-	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f),  focalLength);
+	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), focalLength);
 	direction = rotation*direction;
 	direction = normalize(direction);
 
@@ -457,13 +483,20 @@ __global__ void singleRay(uchar4* pixels, unsigned int width, unsigned int heigh
 				break;
 			}
 		}
+	} else {
+		// Show bounding sphere
+		/*
+		pixels[index].w = 0;
+		pixels[index].x = 255;
+		pixels[index].y = 255;
+		pixels[index].z = 255;
+		return;
+		*/
 	}
-
-
 	color(pixels, hit, steps, direction, position, pos, index);
 }
 
-__global__ void setUp(LOD l){//(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps, unsigned int priSize) {
+__global__ void setUp(LOD l) {//(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps, unsigned int priSize) {
 	EpsilonRaymarch = l.epsilon;
 	FractalIterations = l.fractalIterations;
 	MaxRaymarchSteps = l.raymarchsteps;

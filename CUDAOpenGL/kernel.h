@@ -14,7 +14,7 @@ __device__ float DEMandelbulb1(const glm::vec3& pos);
 __device__ float DEMandelbulb2(const glm::vec3& pos);
 
 __device__ bool BoundingSphere(const glm::vec3& dir, const glm::vec3& pos);
-__device__ bool PlaneFloor(const glm::vec3& dir, const glm::vec3& pos);
+__device__ glm::vec3 PlaneFloor(const glm::vec3& dir, const glm::vec3& pos);
 
 __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 rayDir, glm::vec3 rayOrigin, glm::vec3 position, int index);
 
