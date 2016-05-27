@@ -84,7 +84,7 @@ void cleanupCuda() {
 }
 
 // Run the Cuda part of the computation
-void runCuda(glm::mat3 rot, glm::vec3 campos) {
+void runCuda(glm::mat3 rot, glm::vec3 campos, float focalLength, LOD l) {
 	uchar4 *dptr = NULL;
 
 	// Map the buffer object
@@ -94,7 +94,7 @@ void runCuda(glm::mat3 rot, glm::vec3 campos) {
 	// Get Address for kernel 
 	cudaGraphicsResourceGetMappedPointer((void**)&dptr, &num_bytes, cuda_pbo);
 
-	launchKernel(dptr, window_width, window_height, rot, campos);
+	launchKernel(dptr, window_width, window_height, focalLength, rot, campos, l);
 
 	// Unmap the buffer object
 	cudaGraphicsUnmapResources(1, &cuda_pbo, 0);

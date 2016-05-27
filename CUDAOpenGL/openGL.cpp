@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <iostream>
+#include <math.h>
 
 #include <glew.h>
 #include <freeglut.h>
@@ -12,6 +13,7 @@
 #include "openGL.h"
 #include "cudapbo.h"
 #include "glm.hpp"
+
 
 extern GLuint textureID;
 extern GLuint pbo;
@@ -31,14 +33,28 @@ glm::vec2 mouseSpeed;
 bool mouseDown;
 float yaw;
 float pitch;
+float focalLength = window_height / 2.f;
+float moveSpeed = 0.001f;
+float sprintSpeed = 3.f;
+LOD l;
+float epsDelta = 0.0002f;
+float rotSpeed = 0.00001f;
+bool orbit = false;
+float orbTime = 0;
+glm::vec3 savedUp;
+float r;
 
 // Constants
-const float sprintSpeed = 3.f;
-const float rotSpeed = 0.00001f;
 const float mouseStillDistance = 5.f;
-const float moveSpeed = 0.001f;
+const unsigned int fracItDelta = 1;
+const unsigned int raymarchDelta = 10;
+const unsigned int priDelta = 1;
+const float orbVel = 0.001f;
+
 
 bool* keyPressed;
+
+
 
 
 void initGL(int argc, char **argv) {
@@ -46,7 +62,7 @@ void initGL(int argc, char **argv) {
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
 	glutInitWindowSize(window_width, window_height);
-	glutInitWindowPosition(10, 10);
+	glutInitWindowPosition(300, 10);
 	glutCreateWindow("Raymarching");
 	glutDisplayFunc(display);
 	glutKeyboardFunc(keyboard);
@@ -56,6 +72,8 @@ void initGL(int argc, char **argv) {
 
 	glutMotionFunc(motion);
 	glutMouseFunc(mouse);
+	glutMouseWheelFunc(mouseWheel);
+
 	glutIdleFunc(idle);
 	glutCloseFunc(cleanupCuda);
 
@@ -89,13 +107,18 @@ void initGL(int argc, char **argv) {
 	glOrtho(0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f);
 
 	lasttime = glutGet(GLUT_ELAPSED_TIME);
+
+	l.epsilon = 0.001f;
+	l.fractalIterations = 10;
+	l.raymarchsteps = 120;
+	l.primRays = 1;
 }
 
 void display() {
 	update();
 
 	// run CUDA kernel
-	runCuda(rotationMatrix, cameraPosition);
+	runCuda(rotationMatrix, cameraPosition, focalLength, l);
 
 	// Create a texture from the buffer
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
@@ -126,6 +149,10 @@ void keyboard(unsigned char key, int x, int y) {
 		glutDestroyWindow(glutGetWindow());
 	} else if (key == 'r') {
 		resetCamera();
+		l.epsilon = 0.001f;
+		l.fractalIterations = 10;
+		l.raymarchsteps = 120;
+		l.primRays = 1;
 	} else if (key == '1') {
 		resetCamera();
 		std::cout << "View Front" << std::endl;
@@ -145,11 +172,100 @@ void keyboard(unsigned char key, int x, int y) {
 	} else if (key == '6') {
 		setView(glm::vec3(0.020500f, 0.197362f, -0.961050f), 0.117f, -0.151f);
 	} else if (key == '7') {
-		setView(glm::vec3(0.391448f, 0.976358f, 0.322076f), 33.917992f, -0.978999f);
-	} else {
+		setView(glm::vec3(0, 0, -9.5f), 0, 0);
+	} else if (key == '<'){
+		if(!orbit){
+			calculateRotation();
+			savedUp = up;
+			r = glm::sqrt(cameraPosition.x*cameraPosition.x + cameraPosition.z*cameraPosition.z);//glm::sqrt(glm::dot(cameraPosition, cameraPosition));
+			orbTime = 0;
+			/*
+			float z = cameraPosition.z;
+			float x = cameraPosition.x;
+			std::cout << "x/z" << x/z << " x: " << x << " z: " << z << " r: " << r << std::endl;
+			if (z < -0.001f){ // TODO THIS IS SHIT
+				orbTime = glm::acos(x/z) + 3.1415927f;
+				
+			} else if (z > 0.001f){
+				orbTime = glm::acos(x/z);
+			}else {
+				if(x > 0.f){
+					orbTime = 0.f;
+				}else{
+					orbTime = 3.1415927f;
+				}
+			}
+
+			std::cout << "orbTime: " << orbTime << std::endl;
+			*/
+
+		}
+		orbit = !orbit;
+
+	}
+
+
+	// Upper 4 keys: improve accuracy
+	// Lower 4 keys: decrease accuracy
+	else if (key == 'h'){
+		if(l.epsilon <= epsDelta){
+			epsDelta *= 0.1f;
+		}
+		l.epsilon = (l.epsilon - epsDelta > 0) ?  l.epsilon - epsDelta : l.epsilon;
+		std::cout << "epsilon: " << l.epsilon << "\t epsDelta: " << epsDelta << std::endl;
+	} else if (key == 'b'){
+		if(l.epsilon >= epsDelta*10.f){
+			epsDelta *= 10.f;
+		}
+		l.epsilon += epsDelta;
+		std::cout << "epsilon: " << l.epsilon << "\t epsDelta:" << epsDelta << std::endl;
+	} 
+
+	else if (key == 'j'){
+		l.fractalIterations += fracItDelta;
+		std::cout << "fractalIterations: " << l.fractalIterations << std::endl;
+	} else if (key == 'n'){
+		l.fractalIterations = (l.fractalIterations - fracItDelta > 0) ?  l.fractalIterations - fracItDelta : l.fractalIterations;
+		std::cout << "fractalIterations: " << l.fractalIterations << std::endl;
+
+	} 
+
+	else if (key == 'k'){
+		l.raymarchsteps += raymarchDelta;
+		std::cout << "raymarchsteps: " << l.raymarchsteps << std::endl;
+	} else if (key == 'm'){
+		l.raymarchsteps = (l.raymarchsteps - raymarchDelta > 0) ?  l.raymarchsteps - raymarchDelta : l.raymarchsteps;
+		std::cout << "raymarchsteps: " << l.raymarchsteps << std::endl;
+	} 
+
+	else if (key == 'l'){
+		l.primRays = (l.primRays - priDelta > 0) ?  l.primRays - priDelta : l.primRays;
+		std::cout << "primRays: " << l.primRays << std::endl;
+	} else if (key == ','){
+		l.primRays += priDelta;
+		std::cout << "primRays: " << l.primRays << std::endl;
+	}
+
+	else if (key == 'o'){
+		std::cout << "LOD: " << std::endl 
+		<< "epsilon:\t \t" << l.epsilon << std::endl 
+		<< "fractalIterations:\t" << l.fractalIterations << std::endl 
+		<< "raymarchsteps:\t \t" << l.raymarchsteps << std::endl 
+		<< "primRays:\t \t" << l.primRays << std::endl;
+	} 
+
+	else {
 		keyPressed[key] = true;
 	}
+	// l.epsilon = 0.001f;
+	// l.fractalIterations = 10;
+	// l.raymarchsteps = 120;
+	// l.priSize = 1;
+	// std::cout << "key: " << key << std::endl;
+
 }
+
+
 
 void keyboardUp(unsigned char key, int x, int y) {
 	keyPressed[key] = false;
@@ -172,6 +288,22 @@ void mouse(int button, int state, int x, int y) {
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_UP) {
 		mouseDown = false;
 		mouseSpeed.x = 0; mouseSpeed.y = 0;
+	}
+}
+
+void mouseWheel(int button, int direction, int x, int y){
+	if(direction > 0){
+		//Up
+		sprintSpeed *= 0.91f;
+		moveSpeed *= 0.91f;
+		focalLength *= 1.1f;
+		rotSpeed *= 0.91f;
+	}else{
+		//Down
+		sprintSpeed *= 1.1f;
+		moveSpeed *= 1.1f;
+		focalLength *= 0.91f;
+		rotSpeed *= 1.1f;
 	}
 }
 
@@ -275,10 +407,30 @@ void update() {
 	movement = (slow ? movement * slowSpeed : movement);
 
 	// Update camera
-	yaw += mouseSpeed.x * dt;
-	pitch += mouseSpeed.y * dt;
-	calculateRotation();
-	cameraPosition += movement *dt;
+	if(orbit){
+		
+		cameraPosition = glm::vec3(r*glm::cos(orbTime), cameraPosition.y, r*glm::sin(orbTime)); // TODO THIS IS SHIT
+
+		up = glm::vec3(0,1,0);// glm::normalize(savedUp); 
+		forward = glm::normalize(-cameraPosition);
+		right = glm::normalize(glm::cross(up, forward));
+		up = glm::normalize(glm::cross(forward, right));
+
+		rotationMatrix = glm::mat3(right.x, right.y, right.z,
+			up.x, up.y, up.z,
+			forward.x, forward.y, forward.z);
+
+		orbTime += dt * orbVel;
+	} else {
+		yaw += mouseSpeed.x * dt;
+		pitch += mouseSpeed.y * dt;
+		calculateRotation();
+		cameraPosition += movement *dt;
+	}
+}
+
+void printVec3(glm::vec3 v){
+	std::cout << "(" << v.x << ", " << v.y << ", " << v.z << ")" << std::endl;
 }
 
 /*

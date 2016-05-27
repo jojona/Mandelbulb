@@ -7,7 +7,7 @@
 #include <math_constants.h>
 
 #include "kernel.h"
-//#include "constants.h"
+#include "constants.h"
 
 #define CAMERALIGHT 0
 #define CIRCLETINT 0
@@ -81,23 +81,24 @@ __device__ float DEMandelbulb1(const glm::vec3& p) {
 	glm::vec3 z = p;
 	float r = 0.0f;
 	float dr = 1.0f;
+	float power = 8.f;
 	for (int i = 0; i < FractalIterations; ++i) {
 		r = length(z);
-		if (r > 8.0f) break;
+		if (r > 100.f) break;
 
 		// To polar coordianates
 		float theta = acosf(z.y / r);
 		float phi = atan2f(z.x, z.z);
-		float r7 = r*r*r*r*r*r*r; // glm::pow(r, 7.0f);
+		float r7 = glm::pow(r, power-1);
 
 		// Derivative
-		dr = r7 * 8.0f * dr + 1.0f;
+		dr = r7 * power * dr + 1.0f;
 
 		// "Squaring" the length
 		float zr = r7*r;
 		// "Double" the angle
-		theta = theta*8.0f;
-		phi = phi * 8.0f;
+		theta = theta*power;
+		phi = phi * power;
 
 		// From polar coordianates
 		z = p + zr*glm::vec3(sinf(phi)*sinf(theta), cosf(theta), sinf(theta) * cosf(phi));
@@ -161,7 +162,7 @@ __device__ bool PlaneFloor(const glm::vec3& dir, const glm::vec3& pos) {
 __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 rayDir, glm::vec3 rayOrigin, glm::vec3 position, int index) {
 	// Draw color to pixels
 	if (hit) {
-		float normalEpsilon = 0.000001f; // TODO find a good epsilon for normal
+		float normalEpsilon = 0.000005f; // TODO find a good epsilon for normal
 		glm::vec3 normal(DE(position + glm::vec3(normalEpsilon, 0, 0)) - DE(position - glm::vec3(normalEpsilon, 0, 0)),
 			DE(position + glm::vec3(0, normalEpsilon, 0)) - DE(position - glm::vec3(0, normalEpsilon, 0)),
 			DE(position + glm::vec3(0, 0, normalEpsilon)) - DE(position - glm::vec3(0, 0, normalEpsilon)));
@@ -220,9 +221,9 @@ __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 ra
 		if (PlaneFloor(rayDir, rayOrigin)) {
 			if (iteration % 1000 < 600) {
 				pixels[index].w = 0;
-				pixels[index].x = 255 & 0xff;
+				pixels[index].x = 0 & 0xff;
 				pixels[index].y = 0 & 0xff;
-				pixels[index].z = 0 & 0xff;
+				pixels[index].z = 255 & 0xff;
 			} else {
 				pixels[index].w = 0;
 				pixels[index].x = 0 & 0xff;
@@ -248,7 +249,7 @@ __device__ glm::vec3 light(const glm::vec3& lightPos, const glm::vec3& lightColo
 }
 
 __device__ bool shadow(const glm::vec3& lightPos, const glm::vec3& position) {
-	float de = 0.0f; // Maybe create an Estimate or calculation of first circle
+	float de = 0.0f; 
 	float d = de;
 
 	glm::vec3 pos(lightPos);
@@ -271,37 +272,66 @@ __device__ bool shadow(const glm::vec3& lightPos, const glm::vec3& position) {
 	if (!hit) {
 		return false;
 	}
-
-	if (length(direction) - 2 * EpsilonRaymarch > d) {
-		return true;
-	}
-	return false;
+	return (length(direction) - 2 * EpsilonRaymarch > d);
 }
 
 
 
-extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int height, glm::mat3 rot, glm::vec3 pos) {
+extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int height, float focalLength, glm::mat3 rot, glm::vec3 pos, LOD l) { // TODO Dela upp lod i 3 param.
 
 	// Change these values if close or far away from the bulb
 	// TODO calculate LOD
-	unsigned int lod = 4;
-	unsigned int primRays;
+	//unsigned int lod = 4;
+	
 
+	// setUp:
+	// float epsilon, 
+	// int fractalIterations, 
+	// int raymarchsteps, 
+	// int priSize
+
+	// Remember to update LOD_MIN and LOD_MAX if more LOD-options are added (openGL.cpp).
+	// Increments fractalIteration -> epsilon -> raymarchsteps
+	setUp<< <1, 1 >> >(l);
+	unsigned int primRays = l.primRays;
+	/*
 	if (lod == 1) {
-		setUp << <1, 1 >> >(.0005f, 10, 120, 9);
-		primRays = 9;
-	} else if (lod == 2) {
-		setUp<<<1, 1>>>(.0005f, 10, 60, 5);
-		primRays = 5;
-	} else if (lod == 3) {
-		setUp<<<1, 1>>>(.0005f, 10, 60, 3);
-		primRays = 3;
-	} else if (lod == 4) {
-		setUp<<<1, 1>>>(0.005f, 10, 120, 1);
 		primRays = 1;
+		setUp << <1, 1 >> >(.001f, 2, 30, primRays);
+	} else if (lod == 2) {
+		primRays = 1;
+		setUp << <1, 1 >> >(.001f, 5, 30, primRays);
+	} else if (lod == 3) {
+		primRays = 1;
+		setUp << <1, 1 >> >(.001f, 5, 30, primRays);
+	} else if (lod == 4) {
+		primRays = 1;
+		setUp << <1, 1 >> >(.001f, 5, 60, primRays);
+	} else if (lod == 5) {
+		primRays = 1;
+		setUp << <1, 1 >> >(.001f, 10, 60, primRays);
+	} else if (lod == 6) {
+		primRays = 1;
+		setUp << <1, 1 >> >(.001f, 10, 60, primRays);
+	} else if (lod == 7) {
+		primRays = 1;
+		setUp << <1, 1 >> >(.001f, 10, 120, primRays);
+	} else if (lod == 8) {
+		primRays = 1;
+		setUp << <1, 1 >> >(.001f, 15, 120, primRays);
+	} else if (lod == 9) {
+		primRays = 1;
+		setUp<<<1, 1>>>(0.001f, 15, 180, primRays);
+	} else if (lod == 10) {
+		primRays = 1;
+		setUp<<<1, 1>>>(0.001f, 15, 240, primRays);
+	} else if (lod == 11) {
+		primRays = 1;
+		setUp<<<1, 1>>>(0.0005f, 15, 300, primRays);
 	} else {
 		printf("Error - Undefined LOD");
 	}
+	*/
 
 	cudaThreadSynchronize();
 
@@ -309,7 +339,7 @@ extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int he
 	int totalThreads = height * width;
 	int totalBlocks = totalThreads % blockThreads == 0 ? totalThreads / blockThreads : totalThreads / blockThreads + 1;
 
-	if (lod != 4) {
+	if (false) {
 		// Allocate raymarchSteps and raymarchDistance
 		unsigned char* raymarchSteps;
 		float * raymarchDistance;
@@ -325,25 +355,25 @@ extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int he
 		int totalThreadsPrimary = primarySize;
 		int totalBlocksPrimary = totalThreadsPrimary % blockThreadsPrimary == 0 ? totalThreadsPrimary / blockThreadsPrimary : totalThreadsPrimary / blockThreadsPrimary + 1;
 
-		primaryRay << <totalBlocksPrimary, blockThreadsPrimary >> >(raymarchSteps, raymarchDistance, width, height, primaryWidth, primaryHeight, rot, pos);
+		primaryRay << <totalBlocksPrimary, blockThreadsPrimary >> >(raymarchSteps, raymarchDistance, width, height, focalLength, primaryWidth, primaryHeight, rot, pos);
 
 		cudaThreadSynchronize(); // Make sure all primary rays are done
 
-		secondaryRay << <totalBlocks, blockThreads >> >(pixels, raymarchSteps, raymarchDistance, width, height, primaryWidth, primaryHeight, rot, pos);
+		secondaryRay << <totalBlocks, blockThreads >> >(pixels, raymarchSteps, raymarchDistance, width, height, focalLength, primaryWidth, primaryHeight, rot, pos);
 
 		cudaThreadSynchronize(); // Synchronize secondary rays
 
 		cudaFree(raymarchSteps); // Do only once?
 		cudaFree(raymarchDistance); // Do only once?
 	} else {
-		singleRay << <totalBlocks, blockThreads >> >(pixels, width, height, rot, pos);
+		singleRay << <totalBlocks, blockThreads >> >(pixels, width, height, focalLength, rot, pos);
 
 		cudaThreadSynchronize(); // Synchronize secondary rays
 	}
 }
 
 
-__global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance, unsigned int width, unsigned int height, unsigned int primaryWidth, unsigned int primaryHeight, glm::mat3 rotation, glm::vec3 position) {
+__global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance, unsigned int width, unsigned int height, float focalLength, unsigned int primaryWidth, unsigned int primaryHeight, glm::mat3 rotation, glm::vec3 position) {
 	// Calculate pixel index, x, y 
 	const unsigned int index = blockIdx.x * blockDim.x + (threadIdx.x);
 	if (index >= primaryHeight*primaryWidth) {
@@ -354,7 +384,7 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 	const unsigned int x = squareRadius + PrimarySize * (index % primaryWidth);
 	const unsigned int y = squareRadius + PrimarySize * (index / primaryWidth);
 
-	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), height / 2.f);
+	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f),  focalLength);
 	direction = rotation*direction;
 	direction = normalize(direction);
 
@@ -397,7 +427,7 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 	raymarchDistance[index] = distance;
 }
 
-__global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float* raymarchDistance, unsigned int width, unsigned int height, unsigned int primaryWidth, unsigned int primaryHeight, glm::mat3 rotation, glm::vec3 position) {
+__global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float* raymarchDistance, unsigned int width, unsigned int height, float focalLength, unsigned int primaryWidth, unsigned int primaryHeight, glm::mat3 rotation, glm::vec3 position) {
 	// Calculate pixel index, x, y
 	const unsigned int index = blockIdx.x * blockDim.x + (threadIdx.x);
 	if (index >= width * height) {
@@ -411,7 +441,7 @@ __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float
 	const unsigned int primaryIndex = x / PrimarySize + (y / PrimarySize) * primaryWidth;
 
 	// Calculate start position from primary ray
-	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), height / 2);
+	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f),  focalLength);
 	direction = rotation*direction;
 	direction = normalize(direction);
 
@@ -440,7 +470,7 @@ __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float
 
 }
 
-__global__ void singleRay(uchar4* pixels, unsigned int width, unsigned int height, glm::mat3 rotation, glm::vec3 position) {
+__global__ void singleRay(uchar4* pixels, unsigned int width, unsigned int height, float focalLength, glm::mat3 rotation, glm::vec3 position) {
 	// Calculate pixel index, x, y
 	const unsigned int index = blockIdx.x * blockDim.x + (threadIdx.x);
 	if (index >= width * height) {
@@ -452,7 +482,7 @@ __global__ void singleRay(uchar4* pixels, unsigned int width, unsigned int heigh
 
 
 	// Calculate start position from primary ray
-	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), height / 2);
+	glm::vec3 direction(x - (width / 2.f), y - (height / 2.f), focalLength);
 	direction = rotation*direction;
 	direction = normalize(direction);
 
@@ -479,15 +509,15 @@ __global__ void singleRay(uchar4* pixels, unsigned int width, unsigned int heigh
 	color(pixels, hit, steps, direction, position, pos, index);
 }
 
-__global__ void setUp(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps, unsigned int priSize) {
-	EpsilonRaymarch = epsilon;
-	FractalIterations = fractalIterations;
-	MaxRaymarchSteps = raymarchsteps;
-	if (priSize == 1) {
+__global__ void setUp(LOD l){//(float epsilon, unsigned int fractalIterations, unsigned int raymarchsteps, unsigned int priSize) {
+	EpsilonRaymarch = l.epsilon;
+	FractalIterations = l.fractalIterations;
+	MaxRaymarchSteps = l.raymarchsteps;
+	if (l.primRays == 1) {
 		PrimarySize = 1;
 		PrimaryRays = false;
 	} else {
-		PrimarySize = priSize;
+		PrimarySize = l.primRays;
 		PrimaryRays = true;
 	}
 	iteration++;

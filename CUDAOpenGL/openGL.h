@@ -11,6 +11,7 @@ void keySpecial(int, int, int);
 void keySpecialUp(int, int, int);
 
 void mouse(int, int, int, int);
+void mouseWheel(int button, int direction, int x, int y);
 void idle();
 void motion(int, int);
 void fps();
@@ -20,7 +21,7 @@ void calculateRotation();
 void resetCamera();
 
 void setView(glm::vec3 pos, float yawangle, float pitchangle);
-
+void printVec3(glm::vec3 v);
 
 
 #endif OPENGL_H
