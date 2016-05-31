@@ -12,13 +12,19 @@
 #define CAMERALIGHT 0
 #define CIRCLETINT 0
 
+#define LIGHTFRONT 1
+#define LIGHTABOVE 0	
+#define LIGHTBELOW 0
+#define LIGHTBEHIND 0
+
+#define COLOR 1
+
 __device__ float EpsilonRaymarch = 0;
 __device__ unsigned int MaxRaymarchSteps = 0;
 __device__ unsigned int FractalIterations = 0;
 __device__ bool PrimaryRays = false;
 __device__ unsigned int PrimarySize = 0;
 __device__ unsigned int iteration = 0;
-
 
 void checkCUDAError(const char *msg) {
 	cudaError_t err = cudaGetLastError();
@@ -32,6 +38,7 @@ __device__ float DE(const glm::vec3& pos) {
 	return DEMandelbulb1(pos);
 	//return DETetredon(pos);
 	//return DESphere1(pos);
+	//return glm::min(DEMandelbulb2(pos) + DETetredon(pos));
 }
 
 /*
@@ -84,12 +91,11 @@ __device__ float DEMandelbulb1(const glm::vec3& p) {
 	float power = 8.f;
 	for (int i = 0; i < FractalIterations; ++i) {
 		r = length(z);
-		if (r > 100.f) break;
-
+		if (r > 8.f) break;
 		// To polar coordianates
 		float theta = acosf(z.y / r);
 		float phi = atan2f(z.x, z.z);
-		float r7 = glm::pow(r, power - 1);
+		float r7 = glm::pow(r, power - 1.f);
 
 		// Derivative
 		dr = r7 * power * dr + 1.0f;
@@ -105,9 +111,9 @@ __device__ float DEMandelbulb1(const glm::vec3& p) {
 	}
 	return 0.5f*logf(r)*r / dr;
 }
-
+	
 /*
- * Distance estimator for a Mandelbulb. Version 2
+ * Distance estimator for a Mandelbulb. Version 2. Does not show egde cases when we are straight above or below the fractal.
  */
 __device__ float DEMandelbulb2(const glm::vec3& pos) {
 	glm::vec3 zz = pos;
@@ -143,10 +149,11 @@ __device__ float DEMandelbulb2(const glm::vec3& pos) {
 
 __device__ bool BoundingSphere(const glm::vec3& dir, const glm::vec3& pos) {
 	float rSquared = 1.2f * 1.2f;
+	return true;
 	if (dot(pos) <= rSquared) {
 		return true;
-	} else if (dot(pos, dir) <= 0) {
-		glm::vec3 v = pos - dir * dot(pos, dir) / dot(dir);
+	} else if (dot(pos, dir) <= 0.0f) {
+		glm::vec3 v = pos - dir * dot(pos, dir);
 		if (dot(v) <= rSquared) {
 			return true;
 		}
@@ -158,7 +165,7 @@ __device__ glm::vec3 PlaneFloor(const glm::vec3& dir, const glm::vec3& pos) {
 	float denom = dot(glm::vec3(0, 1, 0), dir);
 	if (denom > 0.0001f) { // Only visible from above
 		float t = dot(glm::vec3(0, 1.5f, 0) - pos, (glm::vec3(0, 1, 0))) / denom;
-		if (t >= 0) {
+		if (t >= 0.0f) {
 
 			glm::vec3 collision = pos + t * dir;
 			if (((int)floorf(collision.x) % 2 == 0 || (int)floorf(collision.z) % 2 == 0) && !((int)floorf(collision.x) % 2 == 0 && (int)floorf(collision.z) % 2 == 0)) {
@@ -189,16 +196,29 @@ __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 ra
 
 		glm::vec3 lightPower(0.f, 0.f, 0.f);
 
+#if COLOR
 		// Global illumination
+		lightPower += glm::vec3(position.x, position.y, position.z) / 2.0f;
+#else
 		lightPower += glm::vec3(0.1f, 0.1f, 0.1f);
+#endif
 
-		// Light 1, 2, 3
+#if LIGHTFRONT
 		// Light side
 		lightPower += light(glm::vec3(2.0f, 0.f, -2.f), glm::vec3(1.f, 1.f, 1.f) * 24.f, position, normal, true);
+#endif
+#if LIGHTBELOW
 		// Light below
 		lightPower += light(glm::vec3(0.f, 2.f, 0.5f), glm::vec3(1.f, 1.f, 1.f)* 5.f, position, normal, true);
+#endif
+#if LIGHTABOVE
 		// Light above
 		lightPower += light(glm::vec3(0.f, -2.f, 0.5f), glm::vec3(1.f, 1.f, 1.f)* 5.f, position, normal, true);
+#endif
+#if LIGHTBEHIND
+		// Light behind
+		lightPower += light(glm::vec3(-2.0f, 0.f, -2.0f), glm::vec3(1.f, 1.f, 1.f) * 24.f, position, normal, true);
+#endif
 
 #if CIRCLETINT
 		float tintFactor = 5.f;
@@ -223,19 +243,20 @@ __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 ra
 		lightPower = glm::min(glm::vec3(1.f, 1.f, 1.f), lightPower);
 		lightPower = glm::max(glm::vec3(0.f, 0.f, 0.f), lightPower);
 
-		/* // Raymarch step coloring
+		pixels[index].w = 0;
+		pixels[index].x = lightPower.x * 255.f;
+		pixels[index].y = lightPower.y * 255.f;
+		pixels[index].z = lightPower.z * 255.f;
+
+		// Raymarch step coloring
+		/* 
 		float color = MaxRaymarchSteps - steps;
 		float maxColor = MaxRaymarchSteps;
 		pixels[index].w = 0;
 		pixels[index].x = (int)(color*255.f / maxColor) & 0xff;
 		pixels[index].y = (int)(color*255.f / maxColor) & 0xff;
 		pixels[index].z = (int)(color*255.f / maxColor) & 0xff;
-		*/
-
-		pixels[index].w = 0;
-		pixels[index].x = lightPower.x * 255.f;
-		pixels[index].y = lightPower.y * 255.f;
-		pixels[index].z = lightPower.z * 255.f;
+		//*/
 	} else {
 		glm::vec3 col = PlaneFloor(rayDir, rayOrigin);
 		pixels[index].w = 0;
@@ -301,9 +322,7 @@ __device__ bool shadow(const glm::vec3& lightPos, const glm::vec3& position) {
 	return (length(direction) - 2 * EpsilonRaymarch > d);
 }
 
-
-
-extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int height, float focalLength, glm::mat3 rot, glm::vec3 pos, LOD l) { // TODO Dela upp lod i 3 param.
+extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int height, float focalLength, glm::mat3 rot, glm::vec3 pos, LOD l) {
 
 	// setUp:
 	// float epsilon, 
@@ -315,7 +334,14 @@ extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int he
 
 	cudaThreadSynchronize();
 
-	int blockThreads = 256;
+	// blockHTreads		fps
+	// 16				22
+	// 256				33
+	// 512				36
+	// 1024				18
+	// Test above run with 1280 x 720
+
+	int blockThreads = 512;
 	int totalThreads = height * width;
 	int totalBlocks = totalThreads % blockThreads == 0 ? totalThreads / blockThreads : totalThreads / blockThreads + 1;
 
@@ -348,7 +374,7 @@ extern "C" void launchKernel(uchar4* pixels, unsigned int width, unsigned int he
 	} else {
 		singleRay << <totalBlocks, blockThreads >> >(pixels, width, height, focalLength, rot, pos);
 
-		cudaThreadSynchronize(); // Synchronize secondary rays
+		cudaThreadSynchronize(); // Synchronize rays
 	}
 }
 
@@ -389,8 +415,9 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 			position += de * direction;
 
 			// Check if all rays are inside here
+			// TODO fix check
 			if (length(cross(secondDir, position - origin)) > de) {
-				de = 0.0f; // TODO change to boolean
+				de = 0.0f;
 			}
 
 			if (de <= EpsilonRaymarch) {
@@ -406,7 +433,7 @@ __global__ void primaryRay(unsigned char* raymarchSteps, float* raymarchDistance
 	raymarchSteps[index] = steps;
 	raymarchDistance[index] = distance;
 }
-
+	
 __global__ void secondaryRay(uchar4* pixels, unsigned char* raymarchSteps, float* raymarchDistance, unsigned int width, unsigned int height, float focalLength, unsigned int primaryWidth, unsigned int primaryHeight, glm::mat3 rotation, glm::vec3 position) {
 	// Calculate pixel index, x, y
 	const unsigned int index = blockIdx.x * blockDim.x + (threadIdx.x);
@@ -491,7 +518,7 @@ __global__ void singleRay(uchar4* pixels, unsigned int width, unsigned int heigh
 		pixels[index].y = 255;
 		pixels[index].z = 255;
 		return;
-		*/
+		//*/
 	}
 	color(pixels, hit, steps, direction, position, pos, index);
 }

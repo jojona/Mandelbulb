@@ -49,7 +49,7 @@ const float mouseStillDistance = 5.f;
 const unsigned int fracItDelta = 1;
 const unsigned int raymarchDelta = 10;
 const unsigned int priDelta = 2;
-const float orbVel = 0.001f;
+const float orbVel = 0.0004f;
 
 
 bool* keyPressed;
@@ -183,7 +183,7 @@ void keyboard(unsigned char key, int x, int y) {
 			float z = cameraPosition.z;
 			float x = cameraPosition.x;
 			std::cout << "x/z" << x / z << " x: " << x << " z: " << z << " r: " << r << std::endl;
-			if (x < -0.001f) { // TODO THIS IS SHIT
+			if (x < -0.001f) {
 				orbTime = atan(z / x) + 3.1415927f;
 
 			} else if (x > 0.001f) {
@@ -211,7 +211,7 @@ void keyboard(unsigned char key, int x, int y) {
 	// Upper 4 keys: improve accuracy
 	// Lower 4 keys: decrease accuracy
 	else if (key == 'h') {
-		l.epsilon = (l.epsilon > epsDelta) ? l.epsilon - epsDelta : l.epsilon;
+		l.epsilon = (l.epsilon > 1.2f*epsDelta) ? l.epsilon - epsDelta : l.epsilon;
 		std::cout << "epsilon: " << l.epsilon << "\t epsDelta: " << epsDelta << std::endl;
 	} else if (key == 'b') {
 		l.epsilon += epsDelta;
@@ -297,10 +297,12 @@ void mouseWheel(int button, int direction, int x, int y) {
 		rotSpeed *= 0.91f;
 	} else {
 		//Down
-		sprintSpeed *= 1.1f;
-		moveSpeed *= 1.1f;
-		focalLength *= 0.91f;
-		rotSpeed *= 1.1f;
+		if (focalLength * 0.91f > window_height / 2.f) {
+			sprintSpeed *= 1.1f;
+			moveSpeed *= 1.1f;
+			focalLength *= 0.91f;
+			rotSpeed *= 1.1f;
+		}
 	}
 }
 
@@ -414,9 +416,6 @@ void update() {
 		}  if (keyPressed['e']) {
 			cameraPosition.y += moveSpeed*dt;
 		}
-
-
-
 
 		cameraPosition = glm::vec3(r*glm::cos(orbTime), cameraPosition.y, r*glm::sin(orbTime));
 
