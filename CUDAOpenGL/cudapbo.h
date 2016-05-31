@@ -3,6 +3,7 @@
 
 #include <glew.h>
 #include "glm.hpp"
+#include "constants.h"
 
 void createPBO(GLuint*);
 void deletePBO(GLuint* pbo);
@@ -11,6 +12,6 @@ void deleteTexture(GLuint* tex);
 
 void initCuda(int argc, char** argv);
 void cleanupCuda();
-void runCuda(glm::mat3 rot, glm::vec3 campos);
+void runCuda(glm::mat3 rot, glm::vec3 campos, float focalLength, LOD l);
 
 #endif CUDAPBO_H
