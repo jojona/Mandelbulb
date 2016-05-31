@@ -198,7 +198,7 @@ __device__ void color(uchar4* pixels, bool hit, unsigned int steps, glm::vec3 ra
 
 #if COLOR
 		// Global illumination
-		lightPower += glm::vec3(position.x, position.y, position.z) / 2.0f;
+		lightPower += glm::abs(glm::vec3(position.x, position.y, position.z)) / 2.0f;
 #else
 		lightPower += glm::vec3(0.1f, 0.1f, 0.1f);
 #endif
